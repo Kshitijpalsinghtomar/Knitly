@@ -1,0 +1,10 @@
+{
+  "description": "Streamline business requirements documentation with AI-driven extraction, conflict detection, and stakeholder mapping, enhancing project clarity and efficiency.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

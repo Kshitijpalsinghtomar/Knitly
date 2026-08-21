@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..60,400;12..60,500;12..60,700;12..60,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────
+   TWO surfaces only. Hierarchy = borders + shadows, not bg.
+   ───────────────────────────────────────────────────────── */
+
+[data-theme="dark"] {
+  --bg:  #111110;
+  --sf:  #1D1D1B;
+  --sf2: #252523;
+  --bd:  rgba(255,255,255,0.09);
+  --bd2: rgba(255,255,255,0.18);
+  --t1:  #EDEAE5;
+  --t2:  #9A9590;  /* secondary text — readable on #1D1D1B */
+  --t3:  #635E5A;  /* muted/labels — was too dark, now legible */
+  --ac:  #F5A623;
+  --acd: rgba(245,166,35,0.14);
+  --acr: 245,166,35;
+  --ok:  #4EAD79;
+  --err: #E05555;
+  --warn: #D4903A;
+  --ai:  #9B6FE8;
+  --aid: rgba(155,111,232,0.14);
+  --sh:  0 2px 12px rgba(0,0,0,0.6);
+  --sh2: 0 8px 36px rgba(0,0,0,0.7);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg:  #EDEAE5;
+  --sf:  #F5F3EF;
+  --sf2: #EFEDE9;
+  --bd:  rgba(0,0,0,0.09);
+  --bd2: rgba(0,0,0,0.16);
+  --t1:  #18170F;
+  --t2:  #6B6762;
+  --t3:  #9B9893;
+  --warn: #B87830;
+  --ac:  #D4890A;
+  --acd: rgba(212,137,10,0.10);
+  --acr: 212,137,10;
+  --ok:  #2E8B5A;
+  --err: #C43A3A;
+  --ai:  #7B50D4;
+  --aid: rgba(123,80,212,0.10);
+  --sh:  0 2px 12px rgba(0,0,0,0.10);
+  --sh2: 0 8px 36px rgba(0,0,0,0.15);
+  color-scheme: light;
+}
+
+/* kept for backward compat in any inline styles that still ref them */
+[data-theme="dark"]  { --s1:var(--sf); --s2:var(--sf); --s3:var(--sf); --s4:var(--bd); --t4:var(--t3); }
+[data-theme="light"] { --s1:var(--sf); --s2:var(--bg); --s3:var(--bg); --s4:var(--bd); --t4:var(--t3); }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--t1);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.bri  { font-family: 'Bricolage Grotesque', sans-serif; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+::selection { background: rgba(var(--acr),0.22); }
+
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--bd2); border-radius: 4px; }
+
+input, button, select, textarea { font-family: inherit; }
+
+select { color-scheme: inherit; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23635E5A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px !important; }
+select option { background: var(--sf); color: var(--t1); }
+
+.project-picker-dropdown {
+  animation: slideDown 0.15s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.35; }
+  50%       { transform: scale(2.2); opacity: 0; }
+}
+
+/* Dashboard rows stay on the canvas: hover clarifies intent without adding panels. */
+@media (max-width: 1000px) {
+  .home-layout { grid-template-columns: 1fr !important; }
+  .home-activity { display: none; }
+}
