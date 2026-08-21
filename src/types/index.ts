@@ -141,3 +141,68 @@ export interface OrphanPR {
   mergedAt: string
   branch: string
 }
+
+// ─── Live Ariadne slice: real ingest → generate → trace → gate ───────────────
+// These types describe the real (non-mock) data path. A `Source` is captured
+// from the paste-ingest surface; a `BRD` is produced by a server-side
+// `BrdGenerator` (see src/server/generator.ts) and carries full source-quote →
+// requirement traceability.
+
+/** A raw ingested source (meeting transcript / pasted note). */
+export interface Source {
+  id: string
+  title: string
+  rawText: string
+  author: string
+  created_at: string
+}
+
+/** A traceable requirement extracted from a source. */
+export interface GeneratedRequirement {
+  id: string
+  /** The requirement statement. */
+  text: string
+  /** Exact quote from the source that this requirement traces back to. */
+  sourceQuote: string
+  /** Inferred author of the quote. */
+  author: string
+  /** When the quote was captured. */
+  timestamp: string
+  status: 'in-sync' | 'stale' | 'contradicted' | 'unlinked'
+  /** Conflicts that reference this requirement. */
+  conflicts: SourceConflict[]
+}
+
+/** A candidate conflict detected between two requirements. */
+export interface SourceConflict {
+  id: string
+  severity: 'major' | 'minor'
+  reqA: string
+  reqB: string
+  title: string
+  desc: string
+  fix: string
+  resolved: boolean
+}
+
+/** The generated Business Requirements Document. */
+export interface BRD {
+  id: string
+  sourceId: string
+  title: string
+  author: string
+  createdAt: string
+  requirements: GeneratedRequirement[]
+  conflicts: SourceConflict[]
+  /** Derived: true only if every requirement is traced AND no conflicts are open. */
+  complete: boolean
+}
+
+/** Runtime status of the backend / persistence layer. */
+export interface ServerStatus {
+  ok: boolean
+  dbConfigured: boolean
+  /** 'db' = Neon persistence ready · 'memory' = in-memory fallback · 'offline' = backend unreachable */
+  mode: 'db' | 'memory' | 'offline'
+  detail?: string
+}

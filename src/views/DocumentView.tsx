@@ -7,7 +7,8 @@ import { Btn } from '../components/ui/Button'
 import { DocTag } from '../components/ui/DocTag'
 import { Trace } from '../components/Trace'
 import { st } from '../lib/utils'
-import type { DocMode, AiFlag } from '../types'
+import { computeCompleteness } from '../server/generator'
+import type { DocMode, AiFlag, BRD, GeneratedRequirement, SourceConflict } from '../types'
 
 // ─── AI Flag inline card ──────────────────────────────────────────────────────
 function AiFlagCard({ flag, onResolve }: { flag: AiFlag; onResolve: (id: string, option: string) => void }) {
@@ -877,10 +878,185 @@ function ActMode({ doc, m }: { doc: typeof DOCUMENTS[0]; m: typeof DOC_META[keyo
   )
 }
 
+// ─── Live BRD panel (real generated slice) ───────────────────────────────────
+function LiveBRDPanel() {
+  const { liveSource, liveBRD, setLiveBRD, prdUnlocked, setView, activeProjectId, setGenOpen } = useApp()
+  const proj = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
+  const [expandedReqs, setExpandedReqs] = useState<Record<string, boolean>>({})
+  const [openConflict, setOpenConflict] = useState<string | null>(null)
+
+  if (!liveBRD) return null
+  const complete = prdUnlocked
+  const openConflicts = liveBRD.conflicts.filter(c => !c.resolved)
+
+  const resolveConflict = (id: string) => {
+    setLiveBRD(prev => {
+      if (!prev) return prev
+      const conflicts = prev.conflicts.map(c => (c.id === id ? { ...c, resolved: true } : c))
+      const next: BRD = { ...prev, conflicts }
+      next.complete = computeCompleteness(next)
+      return next
+    })
+  }
+  const resetConflict = (id: string) => {
+    setLiveBRD(prev => {
+      if (!prev) return prev
+      const conflicts = prev.conflicts.map(c => (c.id === id ? { ...c, resolved: false } : c))
+      const next: BRD = { ...prev, conflicts }
+      next.complete = computeCompleteness(next)
+      return next
+    })
+  }
+
+  const goToReq = (id: string) => { setView('requirement') }
+
+  return (
+    <div style={st({ flex: 1, overflowY: 'auto', background: 'var(--bg)' })}>
+
+      {/* Header */}
+      <div style={st({ padding: '30px 40px 22px', borderBottom: '1px solid var(--bd)' })}>
+        <div style={st({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 })}>
+          <div style={st({ minWidth: 0 })}>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 })}>
+              <span style={st({ fontSize: 9, fontWeight: 700, color: 'var(--ai)', background: 'var(--aid)', padding: '2px 7px', borderRadius: 4, letterSpacing: '0.07em' })}>LIVE · GENERATED</span>
+              <span style={st({ fontSize: 12, color: 'var(--t3)' })}>{proj.name}</span>
+            </div>
+            <h1 className="bri" style={st({ fontSize: 26, fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.045em', lineHeight: 1.15, margin: '0 0 12px', maxWidth: 640 })}>
+              {liveBRD.title}
+            </h1>
+            <div style={st({ fontSize: 12, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' })}>
+              <span>Source: <strong style={st({ fontWeight: 600 })}>{liveSource?.title}</strong></span>
+              <span style={st({ color: 'var(--bd2)' })}>·</span>
+              <span>by {liveBRD.author}</span>
+              <span style={st({ color: 'var(--bd2)' })}>·</span>
+              <span>{new Date(liveBRD.createdAt).toLocaleString()}</span>
+            </div>
+          </div>
+          {/* Gate card */}
+          <div style={st({ flexShrink: 0, width: 240, padding: 16, borderRadius: 14, background: 'var(--sf)', border: `1.5px solid ${complete ? 'var(--ok)' : 'var(--bd2)'}` })}>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 })}>
+              <div style={st({ width: 8, height: 8, borderRadius: '50%', background: complete ? 'var(--ok)' : 'var(--warn)', flexShrink: 0 })} />
+              <span style={st({ fontSize: 12, fontWeight: 700, color: complete ? 'var(--ok)' : 'var(--warn)' })}>
+                BRD {complete ? 'Complete' : 'Incomplete'}
+              </span>
+            </div>
+            <p style={st({ fontSize: 11.5, color: 'var(--t3)', lineHeight: 1.5, margin: '0 0 10px' })}>
+              Requires every requirement traced to a source quote and no open conflicts ({openConflicts.length} open).
+            </p>
+            <Btn v="primary" sm disabled={!complete} onClick={() => setGenOpen(true)} title={complete ? undefined : 'Resolve all conflicts first'}>
+              <Ico n="sparkle" s={11} c={complete ? '#0F0F0E' : 'var(--t3)'} /> Generate PRD
+            </Btn>
+            {!complete && <p style={st({ fontSize: 10.5, color: 'var(--t3)', margin: '7px 0 0' })}>PRD is gated until this BRD is complete.</p>}
+          </div>
+        </div>
+        {/* Mini stats */}
+        <div style={st({ display: 'flex', gap: 24, marginTop: 16 })}>
+          <div><span className="bri" style={st({ fontSize: 20, fontWeight: 800 })}>{liveBRD.requirements.length}</span><div style={st({ fontSize: 10, color: 'var(--t3)' })}>requirements</div></div>
+          <div><span className="bri" style={st({ fontSize: 20, fontWeight: 800, color: openConflicts.length > 0 ? 'var(--err)' : 'var(--ok)' })}>{openConflicts.length}</span><div style={st({ fontSize: 10, color: 'var(--t3)' })}>open conflicts</div></div>
+          <div><span className="bri" style={st({ fontSize: 20, fontWeight: 800, color: 'var(--ok)' })}>{liveBRD.requirements.filter(r => r.sourceQuote && r.sourceQuote.trim()).length}</span><div style={st({ fontSize: 10, color: 'var(--t3)' })}>traced</div></div>
+        </div>
+      </div>
+
+      <div style={st({ display: 'grid', gridTemplateColumns: '1fr 290px' })}>
+        {/* Left: requirements with trace */}
+        <div style={st({ padding: '26px 40px 60px', borderRight: '1px solid var(--bd)' })}>
+          <div style={st({ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 })}>
+            <span style={st({ fontSize: 10, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase' })}>Extracted requirements</span>
+            <span style={st({ fontSize: 11, color: 'var(--t3)' })}>{liveBRD.requirements.length} total</span>
+          </div>
+          {liveBRD.requirements.length === 0 && (
+            <p style={st({ fontSize: 13, color: 'var(--t3)', fontStyle: 'italic' })}>No requirements extracted — is your transcript substantive (sentences ≥ 6 words)?</p>
+          )}
+          {liveBRD.requirements.map((req: GeneratedRequirement, i: number) => (
+            <div key={req.id} style={st({ padding: '13px 0', borderBottom: i < liveBRD.requirements.length - 1 ? '1px solid var(--bd)' : 'none' })}>
+              <div style={st({ display: 'flex', alignItems: 'flex-start', gap: 12 })}>
+                <button onClick={() => goToReq(req.id)} className="mono"
+                  style={st({ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)', fontSize: 10.5, color: '#5B8DEF', fontWeight: 700, flexShrink: 0, textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '2px' })}>
+                  {req.id}
+                </button>
+                <div style={st({ flex: 1, minWidth: 0 })}>
+                  <div style={st({ fontSize: 13.5, color: 'var(--t1)', lineHeight: 1.6 })}>{req.text}</div>
+                  <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' })}>
+                    <span style={st({ fontSize: 11, color: 'var(--t3)' })}>by <strong style={st({ fontWeight: 600, color: 'var(--t2)' })}>{req.author}</strong></span>
+                    <span style={st({ color: 'var(--bd2)' })}>·</span>
+                    <span style={st({ fontSize: 11, color: 'var(--t3)' })}>{req.timestamp ? new Date(req.timestamp).toLocaleString() : '—'}</span>
+                    <span style={st({ fontSize: 10, fontWeight: 700, color: 'var(--ok)', background: 'rgba(78,173,121,0.12)', padding: '1px 7px', borderRadius: 100 })}>traced</span>
+                    {req.conflicts.length > 0 && (
+                      <span style={st({ fontSize: 10, fontWeight: 700, color: 'var(--err)', background: 'rgba(224,95,106,0.12)', padding: '1px 7px', borderRadius: 100 })}>conflict</span>
+                    )}
+                    <button onClick={() => setExpandedReqs(p => ({ ...p, [req.id]: !p[req.id] }))}
+                      style={st({ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--ac)', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: 3 })}>
+                      source quote <Ico n={expandedReqs[req.id] ? 'chevron-d' : 'chevron-r'} s={10} c="currentColor" />
+                    </button>
+                  </div>
+                  {expandedReqs[req.id] && (
+                    <blockquote style={st({ margin: '10px 0 0', padding: '10px 14px', background: 'var(--sf)', borderLeft: '3px solid #5B8DEF', borderRadius: 8, fontSize: 12.5, fontStyle: 'italic', color: 'var(--t2)', lineHeight: 1.6 })}>
+                      {req.sourceQuote}
+                    </blockquote>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Right: conflicts + gate */}
+        <div style={st({ padding: '26px 22px 60px' })}>
+          <div style={st({ fontSize: 10, fontWeight: 700, color: 'var(--err)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 })}>Conflicts ({openConflicts.length} open)</div>
+          {liveBRD.conflicts.length === 0 ? (
+            <div style={st({ padding: '12px', background: 'rgba(78,173,121,0.08)', border: '1px solid rgba(78,173,121,0.25)', borderRadius: 10, fontSize: 12.5, color: 'var(--ok)' })}>
+              No conflicts detected — this BRD is fully complete. PRD is unlocked.
+            </div>
+          ) : (
+            <div>
+              {liveBRD.conflicts.map((c: SourceConflict) => {
+                const done = c.resolved
+                const expanded = openConflict === c.id
+                return (
+                  <div key={c.id} style={st({ padding: '11px 0', borderBottom: '1px solid var(--bd)', opacity: done ? 0.5 : 1 })}>
+                    <button onClick={() => { if (!done) setOpenConflict(expanded ? null : c.id) }}
+                      style={st({ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', textAlign: 'left', cursor: done ? 'default' : 'pointer', fontFamily: 'inherit', padding: 0 })}>
+                      <span className="mono" style={st({ fontSize: 10, color: c.severity === 'major' ? 'var(--err)' : 'var(--t3)', fontWeight: 700 })}>{c.id}</span>
+                      <span style={st({ flex: 1, fontSize: 12.5, color: 'var(--t1)', lineHeight: 1.45 })}>{c.title}</span>
+                      {done ? <Ico n="check" s={11} c="var(--ok)" /> : <Ico n={expanded ? 'chevron-d' : 'chevron-r'} s={11} c="var(--t3)" />}
+                    </button>
+                    {expanded && !done && (
+                      <div style={st({ marginTop: 10, padding: '10px 12px', background: 'var(--sf)', border: '1px solid var(--bd)', borderRadius: 10, fontSize: 12, color: 'var(--t2)', lineHeight: 1.6 })}>
+                        <div style={st({ marginBottom: 6 })}>{c.desc}</div>
+                        <div style={st({ color: 'var(--t3)', marginBottom: 10 })}><strong style={st({ fontWeight: 600, color: 'var(--t2)' })}>Fix:</strong> {c.fix}</div>
+                        <Btn sm v="primary" onClick={() => resolveConflict(c.id)}>Mark resolved</Btn>
+                      </div>
+                    )}
+                    {done && (
+                      <button onClick={() => resetConflict(c.id)} style={st({ marginTop: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--t3)', fontFamily: 'inherit', padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' })}>Reopen</button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div style={st({ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--bd)' })}>
+            <div style={st({ fontSize: 10, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 })}>Traceability</div>
+            <p style={st({ fontSize: 12.5, color: 'var(--t2)', lineHeight: 1.6, margin: 0 })}>
+              Every requirement carries its <strong style={st({ fontWeight: 600 })}>source quote</strong>, author, and timestamp back to {liveSource?.title}. No orphan requirements.
+            </p>
+          </div>
+          <div style={st({ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--bd)' })}>
+            <Btn v="ghost" sm onClick={() => setView('traceability')}><Ico n="link" s={12} c="var(--t2)" /> Full traceability view</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main DocumentView shell ───────────────────────────────────────────────────
 export function DocumentView() {
-  const { activeProjectId } = useApp()
+  const { activeProjectId, liveBRD } = useApp()
   const [mode, setMode] = useState<DocMode>('brief')
+
+  if (liveBRD) return <LiveBRDPanel />
 
   const projectDocs = DOCUMENTS.filter(d => d.pid === activeProjectId)
   const doc = projectDocs[0] || DOCUMENTS[0]
