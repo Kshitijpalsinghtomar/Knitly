@@ -7,9 +7,12 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "bun run server/index.ts",
+    "serve": "bun run server/index.ts",
     "format": "oxfmt"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

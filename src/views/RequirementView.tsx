@@ -3,6 +3,7 @@ import { REQUIREMENTS_DETAIL, TEAM_DATA, PROJECTS, DOCUMENTS } from '../data'
 import { Ico } from '../components/ui/Icon'
 import { Btn } from '../components/ui/Button'
 import { st } from '../lib/utils'
+import type { GeneratedRequirement } from '../types'
 
 const STATUS_CONFIG = {
   'in-sync':     { label: 'In sync',     color: 'var(--ok)',   bg: 'rgba(78,173,121,0.12)' },
@@ -65,8 +66,111 @@ function ChainStep({ n, label, status, children }: {
   )
 }
 
+// ─── Live generated requirement (full source-quote trace) ────────────────────
+function LiveRequirementPanel({ req, onBack, sourceTitle, brdTitle }: {
+  req: GeneratedRequirement
+  onBack: () => void
+  sourceTitle?: string
+  brdTitle?: string
+}) {
+  return (
+    <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' })}>
+      {/* Header bar */}
+      <div style={st({ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 40px', borderBottom: '1px solid var(--bd)', flexShrink: 0 })}>
+        <button onClick={onBack} style={st({ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--t3)', fontFamily: 'inherit', padding: '4px 8px 4px 0' })}>
+          <Ico n="arrow-l" s={14} c="currentColor" /> Back
+        </button>
+        <div style={st({ width: 1, height: 16, background: 'var(--bd)' })} />
+        <span className="mono" style={st({ fontSize: 12.5, fontWeight: 700, color: 'var(--t2)' })}>{req.id}</span>
+        <span style={st({ fontSize: 11, fontWeight: 600, color: 'var(--ok)', background: 'rgba(78,173,121,0.12)', padding: '3px 10px', borderRadius: 100 })}>In sync · traced</span>
+        <div style={st({ marginLeft: 'auto', display: 'flex', gap: 8 })}>
+          <Btn v="ghost" onClick={onBack}><Ico n="arrow-r" s={13} c="var(--t2)" /> Back to document</Btn>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={st({ flex: 1, overflowY: 'auto' })}>
+        <div style={st({ padding: '40px 52px 80px', maxWidth: 760 })}>
+          <div style={st({ fontSize: 11, color: 'var(--t3)', marginBottom: 12, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' })}>
+            {sourceTitle && <span>{sourceTitle}</span>}
+            {brdTitle && <><span style={st({ color: 'var(--bd2)' })}>·</span><span>{brdTitle}</span></>}
+          </div>
+          <h1 className="bri" style={st({ fontSize: 30, fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.045em', lineHeight: 1.2, margin: '0 0 30px' })}>
+            {req.text}
+          </h1>
+
+          {/* Source chain */}
+          <ChainStep n={1} label="Source">
+            <div style={st({ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 })}>
+              <span style={st({ fontSize: 15 })}>🎙</span>
+              <span style={st({ fontSize: 12, color: 'var(--t3)', fontWeight: 600 })}>Meeting / transcript</span>
+              <span style={st({ fontSize: 12, color: 'var(--t3)', marginLeft: 'auto' })}>{req.timestamp ? new Date(req.timestamp).toLocaleString() : '—'}</span>
+            </div>
+            <blockquote style={st({ fontSize: 16, fontStyle: 'italic', color: 'var(--t1)', lineHeight: 1.7, margin: 0, padding: '16px 20px', background: 'var(--sf)', borderRadius: 10, borderLeft: '3px solid var(--bd2)' })}>
+              {req.sourceQuote}
+            </blockquote>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 })}>
+              <div style={st({ width: 18, height: 18, borderRadius: '50%', background: '#9B6FE8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff' })}>
+                {req.author.slice(0, 1).toUpperCase()}
+              </div>
+              <span style={st({ fontSize: 12, color: 'var(--t3)' })}>Quoted by <strong style={st({ fontWeight: 600, color: 'var(--t2)' })}>{req.author}</strong></span>
+            </div>
+          </ChainStep>
+
+          {/* Conflicts referencing this requirement */}
+          <ChainStep n={2} label="Conflicts" status={req.conflicts.length > 0 ? undefined : 'in-sync'}>
+            {req.conflicts.length === 0 ? (
+              <div style={st({ fontSize: 13, color: 'var(--t3)' })}>No conflicts reference this requirement.</div>
+            ) : (
+              <div style={st({ display: 'flex', flexDirection: 'column', gap: 8 })}>
+                {req.conflicts.map(c => (
+                  <div key={c.id} style={st({ padding: '12px 14px', background: 'rgba(224,95,106,0.07)', border: '1px solid rgba(224,95,106,0.25)', borderRadius: 10, fontSize: 12.5, color: 'var(--t2)', lineHeight: 1.6 })}>
+                    <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 })}>
+                      <Ico n="warning" s={13} c="var(--err)" />
+                      <span className="mono" style={st({ fontSize: 10.5, fontWeight: 700, color: 'var(--err)' })}>{c.id}</span>
+                      <span style={st({ fontSize: 11, fontWeight: 700, color: c.severity === 'major' ? 'var(--err)' : 'var(--warn)' })}>{c.severity === 'major' ? 'major' : 'minor'}</span>
+                    </div>
+                    <div>{c.desc}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ChainStep>
+
+          {/* Next downstream */}
+          <div style={st({ display: 'flex', gap: 0 })}>
+            <div style={st({ width: 36, flexShrink: 0 })}>
+              <div className="mono" style={st({ width: 28, height: 28, borderRadius: '50%', background: 'var(--sf)', border: '1.5px solid var(--bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--t3)' })}>3</div>
+            </div>
+            <div style={st({ flex: 1, paddingLeft: 16 })}>
+              <div style={st({ fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 8 })}>Downstream</div>
+              <button onClick={onBack} style={st({ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--ac)', fontFamily: 'inherit', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 })}>
+                Back to generated BRD <Ico n="arrow-r" s={11} c="var(--ac)" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function RequirementView() {
-  const { activeReqId, setView, setActiveReqId } = useApp()
+  const { activeReqId, setView, setActiveReqId, liveBRD, liveSource } = useApp()
+
+  // Live path: render a real generated requirement (full source-quote trace).
+  const liveReq = liveBRD?.requirements.find(r => r.id === activeReqId) ?? null
+  if (liveReq) {
+    return (
+      <LiveRequirementPanel
+        req={liveReq}
+        onBack={() => { setActiveReqId(null); setView('document') }}
+        sourceTitle={liveSource?.title}
+        brdTitle={liveBRD?.title}
+      />
+    )
+  }
+
   const req = REQUIREMENTS_DETAIL.find(r => r.id === activeReqId) || REQUIREMENTS_DETAIL[0]
   const doc = DOCUMENTS.find(d => d.id === req.docId)
   const proj = PROJECTS.find(p => p.id === req.pid)
