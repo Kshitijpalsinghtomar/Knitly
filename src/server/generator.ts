@@ -29,6 +29,15 @@ const TOPIC_KEYWORDS = [
   'payment', 'checkout', 'fraud', 'speed', 'order', 'auth', 'currency', 'card',
   'support', 'page', 'mobile', 'limit', 'amount', 'scope', 'price', 'rate',
   'refund', 'step', 'redirect', 'user', 'discount', 'api', 'session', 'threshold',
+  'one-click', 'buy', 'purchase', 'cart', 'returning',
+]
+
+// Explicit contradiction phrasing — flags a conflict even when the policy wording
+// doesn't fall neatly into the positive/negative pole groups (e.g. "one-click buy
+// ... conflicts with ... fraud check").
+const CONTRADICTION_MARKERS = [
+  'conflicts with', 'conflict with', 'contradicts', 'contradiction',
+  'clashes with', 'is at odds with', 'but cannot', 'however, we cannot',
 ]
 
 const hasAny = (text: string, words: string[]) =>
@@ -37,31 +46,44 @@ const hasAny = (text: string, words: string[]) =>
 function detectConflicts(reqs: GeneratedRequirement[]): SourceConflict[] {
   const conflicts: SourceConflict[] = []
   let n = 0
+  const pushConflict = (a: GeneratedRequirement, b: GeneratedRequirement, severity: 'major' | 'minor') => {
+    n++
+    conflicts.push({
+      id: `CON-${String(n).padStart(3, '0')}`,
+      severity,
+      reqA: a.id,
+      reqB: b.id,
+      title: `${a.id} contradicts ${b.id}`,
+      desc: `${a.text} (from ${a.author}) conflicts with ${b.text} (from ${b.author}).`,
+      fix: 'Reconcile the two requirements to a single agreed behaviour, then mark this conflict resolved.',
+      resolved: false,
+    })
+  }
+
   for (let i = 0; i < reqs.length; i++) {
     for (let j = i + 1; j < reqs.length; j++) {
       const a = reqs[i]
       const b = reqs[j]
-      const sharedTopic = TOPIC_KEYWORDS.some(
-        (t) => a.text.toLowerCase().includes(t) && b.text.toLowerCase().includes(t)
-      )
+      const aT = a.text.toLowerCase()
+      const bT = b.text.toLowerCase()
+      const sharedTopic = TOPIC_KEYWORDS.some((t) => aT.includes(t) && bT.includes(t))
       if (!sharedTopic) continue
+
+      // Explicit contradiction phrasing takes priority and is flagged as major.
+      const explicit = CONTRADICTION_MARKERS.some((m) => aT.includes(m) || bT.includes(m))
+      if (explicit) {
+        pushConflict(a, b, 'major')
+        continue
+      }
+
       for (const [pos, neg, severity] of CONTRADICTION_GROUPS) {
         const aPos = hasAny(a.text, pos)
         const bNeg = hasAny(b.text, neg)
         const bPos = hasAny(b.text, pos)
         const aNeg = hasAny(a.text, neg)
         if ((aPos && bNeg) || (bPos && aNeg)) {
-          n++
-          conflicts.push({
-            id: `CON-${String(n).padStart(3, '0')}`,
-            severity,
-            reqA: a.id,
-            reqB: b.id,
-            title: `${a.id} contradicts ${b.id}`,
-            desc: `${a.text} (from ${a.author}) conflicts with ${b.text} (from ${b.author}).`,
-            fix: 'Reconcile the two requirements to a single agreed behaviour, then mark this conflict resolved.',
-            resolved: false,
-          })
+          pushConflict(a, b, severity)
+          break
         }
       }
     }

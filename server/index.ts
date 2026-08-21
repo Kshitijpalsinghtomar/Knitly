@@ -87,8 +87,8 @@ const server = Bun.serve({
     if (url.pathname.startsWith('/api/')) return handleApi(req)
 
     // Static frontend (built with `pnpm build`).
-    if (url.pathname !== '/' && !url.pathname.includes('.')) {
-      // SPA fallback to index.html for client-side routes.
+    if (!url.pathname.includes('.')) {
+      // SPA fallback to index.html for `/` and client-side routes.
       const root = Bun.file(`${DIST}/index.html`)
       return root.exists().then((e) => (e ? new Response(root) : new Response('Not found', { status: 404 })))
     }
