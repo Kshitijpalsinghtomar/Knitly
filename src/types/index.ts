@@ -198,6 +198,17 @@ export interface BRD {
   complete: boolean
 }
 
+/**
+ * Detailed database health surfaced by `/api/health`.
+ * `ready` reflects successful schema initialization on this process start;
+ * `reachable` reflects the live `SELECT 1` probe.
+ */
+export interface DbHealth {
+  ready: boolean
+  reachable: boolean
+  detail: string
+}
+
 /** Runtime status of the backend / persistence layer. */
 export interface ServerStatus {
   ok: boolean
@@ -205,4 +216,6 @@ export interface ServerStatus {
   /** 'db' = Neon persistence ready · 'memory' = in-memory fallback · 'offline' = backend unreachable */
   mode: 'db' | 'memory' | 'offline'
   detail?: string
+  /** Present only in db mode; describes real schema/connectivity state (never leaks the URL). */
+  db?: DbHealth
 }

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "start": "bun run server/index.ts",
     "serve": "bun run server/index.ts",
+    "test": "bun test server/",
     "format": "oxfmt"
   },
   "dependencies": {

@@ -45,6 +45,36 @@ function lazySql(): ReturnType<typeof neon> {
   return neon(url)
 }
 
+/** Outcome of a lightweight database connectivity probe. */
+export interface DbConnectivity {
+  ok: boolean
+  /** Human-readable, safe status text. Never contains the URL or credentials. */
+  detail: string
+}
+
+/**
+ * Lightweight live connectivity probe against the configured database.
+ * Runs `SELECT 1`. Used by `/api/health` so the reported mode reflects actual
+ * reachability rather than the mere presence of `DATABASE_URL`.
+ *
+ * In memory mode (no `DATABASE_URL`) returns `ok: true` — there is no database
+ * to be unreachable, so the endpoint is healthy and in-memory.
+ *
+ * Never throws and never leaks the connection URL or credentials.
+ */
+export async function checkDbReachable(): Promise<DbConnectivity> {
+  if (!dbConfigured()) {
+    return { ok: true, detail: 'Memory mode — no database configured.' }
+  }
+  try {
+    const sql = lazySql()
+    await (sql`select 1` as Promise<Rows>)
+    return { ok: true, detail: 'Database reachable (SELECT 1 ok).' }
+  } catch {
+    return { ok: false, detail: 'Database configured but unreachable or query failed.' }
+  }
+}
+
 export async function ensureSchema(): Promise<void> {
   if (!dbConfigured()) return
   const sql = lazySql()
