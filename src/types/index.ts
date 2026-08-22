@@ -196,6 +196,10 @@ export interface BRD {
   conflicts: SourceConflict[]
   /** Derived: true only if every requirement is traced AND no conflicts are open. */
   complete: boolean
+  /** Document type (always 'brd' for a BRD). Set by the generation endpoint. */
+  type?: DocType
+  /** The user's requested brief captured at generation time (optional). */
+  brief?: string
 }
 
 /**
