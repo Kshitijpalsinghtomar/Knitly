@@ -4,7 +4,13 @@
  * Serves the built Knitly frontend (from `dist/`) AND the real backend slice:
  *   - `POST /api/sources`      persist an ingested source (Neon via DATABASE_URL,
  *                              falling back to an in-memory store when unset)
+ *   - `GET  /api/sources`      list persisted sources (newest first)
+ *   - `GET  /api/sources/:id`  load a single source by id
  *   - `POST /api/brd/generate` run the deterministic rule-based BRD generator
+ *   - `GET  /api/brds`         list persisted BRDs (newest first)
+ *   - `GET  /api/brds/:id`     load a single BRD by id
+ *   - `PATCH /api/brds/:id/conflicts/:conflictId` persist a conflict resolution
+ *                             ({ resolved: boolean }) and recompute `complete`
  *   - `GET  /api/health`       report runtime status (db/memory/offline) with a
  *                              REAL connectivity probe — see DbHealth below
  *
@@ -27,7 +33,11 @@ import { defaultBrdGenerator, computeCompleteness } from '../src/server/generato
 import {
   createSource,
   getSource,
+  getBRD,
+  listSources,
+  listBRDs,
   saveBRD,
+  resolveBRDConflict,
   ensureSchema,
   dbConfigured,
   checkDbReachable,
@@ -116,6 +126,60 @@ async function handleApi(req: Request): Promise<Response> {
     const written = await dbWrites(() => createSource({ title: title || 'Untitled', rawText, author }))
     if (!written.ok) return json({ error: 'Database unavailable — could not persist source.', db: await healthStatus() }, 503)
     return json({ source: written.value.source, ...(await healthStatus()) }, 201)
+  }
+
+  // List persisted sources (durable lifecycle).
+  if (url.pathname === '/api/sources' && req.method === 'GET') {
+    const listed = await dbWrites(() => listSources())
+    if (!listed.ok) return json({ error: 'Database unavailable — could not list sources.', db: await healthStatus() }, 503)
+    return json({ sources: listed.value, ...(await healthStatus()) }, 200)
+  }
+
+  // Load a single persisted source by id.
+  const sourceMatch = url.pathname.match(/^\/api\/sources\/([^/]+)$/)
+  if (sourceMatch && req.method === 'GET') {
+    const fetched = await dbWrites(() => getSource(decodeURIComponent(sourceMatch[1])))
+    if (!fetched.ok) return json({ error: 'Database unavailable — could not load source.', db: await healthStatus() }, 503)
+    if (!fetched.value) return json({ error: 'Source not found.' }, 404)
+    return json({ source: fetched.value }, 200)
+  }
+
+  // List persisted BRDs (durable lifecycle).
+  if (url.pathname === '/api/brds' && req.method === 'GET') {
+    const listed = await dbWrites(() => listBRDs())
+    if (!listed.ok) return json({ error: 'Database unavailable — could not list BRDs.', db: await healthStatus() }, 503)
+    return json({ brds: listed.value, ...(await healthStatus()) }, 200)
+  }
+
+  // Persisted conflict resolution for a BRD.
+  const conflictMatch = url.pathname.match(/^\/api\/brds\/([^/]+)\/conflicts\/([^/]+)$/)
+  if (conflictMatch && req.method === 'PATCH') {
+    let body: { resolved?: unknown }
+    try {
+      body = await req.json()
+    } catch {
+      return json({ error: 'Invalid JSON body.' }, 400)
+    }
+    if (typeof body.resolved !== 'boolean') {
+      return json({ error: '`resolved` must be a boolean.' }, 400)
+    }
+    const result = await dbWrites(() =>
+      resolveBRDConflict(decodeURIComponent(conflictMatch[1]), decodeURIComponent(conflictMatch[2]), body.resolved as boolean)
+    )
+    if (!result.ok) return json({ error: 'Database unavailable — could not update BRD.', db: await healthStatus() }, 503)
+    if (!result.value.ok) {
+      return json({ error: result.value.reason === 'brd' ? 'BRD not found.' : 'Conflict not found.' }, 404)
+    }
+    return json({ brd: result.value.brd, ...(await healthStatus()) }, 200)
+  }
+
+  // Load a single persisted BRD by id.
+  const brdMatch = url.pathname.match(/^\/api\/brds\/([^/]+)$/)
+  if (brdMatch && req.method === 'GET') {
+    const fetched = await dbWrites(() => getBRD(decodeURIComponent(brdMatch[1])))
+    if (!fetched.ok) return json({ error: 'Database unavailable — could not load BRD.', db: await healthStatus() }, 503)
+    if (!fetched.value) return json({ error: 'BRD not found.' }, 404)
+    return json({ brd: fetched.value }, 200)
   }
 
   if (url.pathname === '/api/brd/generate' && req.method === 'POST') {
