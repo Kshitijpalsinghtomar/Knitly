@@ -1,118 +1,294 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
+import { REQUIREMENTS_DETAIL, ORPHAN_PRS, TEAM_DATA, PROJECTS } from '../data'
 import { Ico } from '../components/ui/Icon'
-import { Btn } from '../components/ui/Button'
-import { Trace } from '../components/Trace'
 import { st } from '../lib/utils'
 
-function LiveTraceRow({ id, text, author, quote, ts }: { id: string; text: string; author?: string; quote?: string; ts?: string }) {
+type Filter = 'all' | 'contradicted' | 'unlinked' | 'in-sync'
+
+const STATUS_DOT: Record<string, string> = {
+  'in-sync':     'var(--ok)',
+  'stale':       'var(--warn)',
+  'contradicted':'var(--err)',
+  'unlinked':    'var(--t3)',
+}
+
+function ReqRow({ id, title, status, prNum, prTitle, onClick, action }: {
+  id: string; title: string; status: string; prNum?: number; prTitle?: string;
+  onClick: () => void; action?: { label: string; icon: 'link' | 'arrow-r' }
+}) {
   const [hov, setHov] = useState(false)
-  const [showQuote, setShowQuote] = useState(false)
   return (
     <div
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={st({
-        display: 'flex', alignItems: 'flex-start', gap: 12,
+        display: 'flex', alignItems: 'center', gap: 12,
         padding: '13px 16px', borderBottom: '1px solid var(--bd)',
-        background: hov ? 'var(--sf)' : 'none', margin: '0 -16px', cursor: 'pointer',
+        cursor: 'pointer', transition: 'background 0.12s',
+        background: hov ? 'var(--sf)' : 'none',
+        margin: '0 -16px',
       })}
-      onClick={() => setShowQuote(s => !s)}
+      onClick={onClick}
     >
-      <div style={st({ width: 7, height: 7, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0, marginTop: 5 })} />
-      <div style={st({ flex: 1, minWidth: 0 })}>
-        <div style={st({ display: 'flex', alignItems: 'baseline', gap: 8 })}>
-          <span className="mono" style={st({ fontSize: 12, fontWeight: 700, color: 'var(--t3)', flexShrink: 0 })}>{id}</span>
-          <span style={st({ fontSize: 13, color: 'var(--t1)', lineHeight: 1.5, flex: 1 })}>{text}</span>
-          <span style={st({ fontSize: 10, fontWeight: 700, color: 'var(--ok)', background: 'rgba(78,173,121,0.12)', padding: '1px 7px', borderRadius: 100, flexShrink: 0 })}>traced</span>
-        </div>
-        <div style={st({ fontSize: 11.5, color: 'var(--t3)', marginTop: 5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' })}>
-          {author && <span>by <strong style={st({ fontWeight: 600, color: 'var(--t2)' })}>{author}</strong></span>}
-          {ts && <><span style={st({ color: 'var(--bd2)' })}>·</span><span>{new Date(ts).toLocaleString()}</span></>}
-        </div>
-        {showQuote && quote && (
-          <blockquote style={st({ margin: '10px 0 0', padding: '10px 14px', background: 'var(--sf)', borderLeft: '3px solid #5B8DEF', borderRadius: 8, fontSize: 12.5, fontStyle: 'italic', color: 'var(--t2)', lineHeight: 1.6 })}>
-            {quote}
-          </blockquote>
+      {/* Status dot */}
+      <div style={st({ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[status] || 'var(--t3)', flexShrink: 0 })} />
+
+      {/* ID */}
+      <span className="mono" style={st({ fontSize: 12, fontWeight: 700, color: 'var(--t3)', flexShrink: 0, width: 60 })}>{id}</span>
+
+      {/* Title */}
+      <span style={st({ fontSize: 13, color: 'var(--t1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
+        {title}
+      </span>
+
+      {/* PR reference */}
+      {prNum && (
+        <span className="mono" style={st({ fontSize: 11.5, color: 'var(--t3)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 })}>
+          <Ico n="github" s={11} c="var(--t3)" /> #{prNum}
+          {status === 'in-sync' && <Ico n="check" s={11} c="var(--ok)" />}
+          {status === 'contradicted' && <Ico n="warning" s={11} c="var(--err)" />}
+        </span>
+      )}
+
+      {/* Action */}
+      <div style={st({ opacity: hov ? 1 : 0, transition: 'opacity 0.12s', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ac)', fontWeight: 600, flexShrink: 0 })}>
+        {action ? (
+          <>
+            <Ico n={action.icon} s={12} c="var(--ac)" /> {action.label}
+          </>
+        ) : (
+          <>View <Ico n="arrow-r" s={12} c="var(--ac)" /></>
         )}
       </div>
     </div>
   )
 }
 
-export function TraceabilityView() {
-  const { liveBRD, liveSource, setView, cancelDocument } = useApp()
-  const [filter, setFilter] = useState<'all' | 'traced'>('all')
-
-  if (!liveBRD) {
-    return (
-      <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 6 })}>
-        <Trace size={64} mood="thinking" />
-        <p className="bri" style={st({ fontSize: 20, fontWeight: 800, color: 'var(--t1)', margin: '18px 0 6px', letterSpacing: '-0.03em' })}>Open a document first</p>
-        <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 20px', maxWidth: 400, textAlign: 'center' })}>
-          Traceability is per-document. Open a generated BRD to see each requirement traced back to its source quote.
-        </p>
-        <Btn v="primary" onClick={cancelDocument}><Ico n="folder" s={12} c="#0F0F0E" /> Browse documents</Btn>
+function PRRow({ pr, title, authorId, mergedAt, onClick }: {
+  pr: number; title: string; authorId: string; mergedAt: string; onClick: () => void
+}) {
+  const [hov, setHov] = useState(false)
+  const author = TEAM_DATA.find(t => t.id === authorId)
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={st({
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '13px 16px', borderBottom: '1px solid var(--bd)',
+        cursor: 'pointer', transition: 'background 0.12s',
+        background: hov ? 'var(--sf)' : 'none',
+        margin: '0 -16px',
+      })}
+      onClick={onClick}
+    >
+      <div style={st({ width: 7, height: 7, borderRadius: '50%', background: 'var(--t3)', flexShrink: 0 })} />
+      <span className="mono" style={st({ fontSize: 12, fontWeight: 700, color: 'var(--t3)', flexShrink: 0, width: 60 })}>#{pr}</span>
+      <span style={st({ fontSize: 13, color: 'var(--t1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>{title}</span>
+      <span style={st({ fontSize: 11.5, color: 'var(--t3)', flexShrink: 0 })}>
+        {author?.name} · {mergedAt}
+      </span>
+      <div style={st({ opacity: hov ? 1 : 0, transition: 'opacity 0.12s', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ac)', fontWeight: 600 })}>
+        <Ico n="link" s={12} c="var(--ac)" /> Link req
       </div>
-    )
+    </div>
+  )
+}
+
+export function TraceabilityView() {
+  const { activeProjectId, setView, setActiveReqId } = useApp()
+  const [filter, setFilter] = useState<Filter>('all')
+  const proj = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
+
+  const reqs = REQUIREMENTS_DETAIL.filter(r => r.pid === activeProjectId)
+  const contradicted = reqs.filter(r => r.status === 'contradicted')
+  const stale = reqs.filter(r => r.status === 'stale')
+  const unlinked = reqs.filter(r => r.status === 'unlinked')
+  const inSync = reqs.filter(r => r.status === 'in-sync')
+
+  const goToReq = (id: string) => {
+    setActiveReqId(id)
+    setView('requirement')
   }
 
-  const reqs = filter === 'all' ? liveBRD.requirements : liveBRD.requirements.filter(r => r.sourceQuote && r.sourceQuote.trim())
-  const tracedCount = liveBRD.requirements.filter(r => r.sourceQuote && r.sourceQuote.trim()).length
-  const openConflicts = liveBRD.conflicts.filter(c => !c.resolved).length
+  const filterTabs: { key: Filter; label: string; count: number; color?: string }[] = [
+    { key: 'all',          label: 'All',          count: reqs.length },
+    { key: 'contradicted', label: 'Contradicted',  count: contradicted.length + stale.length, color: 'var(--err)' },
+    { key: 'unlinked',     label: 'No code',       count: unlinked.length + ORPHAN_PRS.length },
+    { key: 'in-sync',      label: 'In sync',       count: inSync.length, color: 'var(--ok)' },
+  ]
+
+  const showContradicted = filter === 'all' || filter === 'contradicted'
+  const showUnlinked = filter === 'all' || filter === 'unlinked'
+  const showInSync = filter === 'all' || filter === 'in-sync'
 
   return (
     <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' })}>
+
       {/* Header */}
-      <div style={st({ padding: '30px 52px 0', flexShrink: 0 })}>
+      <div style={st({ padding: '36px 52px 0', flexShrink: 0 })}>
         <div style={st({ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 })}>
           <div>
-            <div style={st({ fontSize: 11, color: 'var(--t3)', marginBottom: 6 })}>Source: {liveSource?.title ?? liveBRD.sourceId}</div>
-            <h1 className="bri" style={st({ fontSize: 34, fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.05em', margin: 0, lineHeight: 1 })}>
-              Requirement traceability
+            <div style={st({ fontSize: 11, color: 'var(--t3)', marginBottom: 6 })}>{proj.name}</div>
+            <h1 className="bri" style={st({ fontSize: 38, fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.05em', margin: 0, lineHeight: 1 })}>
+              Code Traceability
             </h1>
           </div>
-          <div style={st({ display: 'flex', gap: 28, alignItems: 'flex-end' })}>
+
+          {/* Summary numbers */}
+          <div style={st({ display: 'flex', gap: 32, alignItems: 'flex-end' })}>
             <div style={st({ textAlign: 'right' })}>
-              <div className="bri" style={st({ fontSize: 34, fontWeight: 800, color: 'var(--ok)', letterSpacing: '-0.06em', lineHeight: 1 })}>{tracedCount}</div>
-              <div style={st({ fontSize: 11, color: 'var(--t3)', marginTop: 3 })}>traced</div>
+              <div className="bri" style={st({ fontSize: 36, fontWeight: 800, color: 'var(--err)', letterSpacing: '-0.06em', lineHeight: 1 })}>{contradicted.length + stale.length}</div>
+              <div style={st({ fontSize: 11, color: 'var(--t3)', marginTop: 3 })}>need attention</div>
             </div>
             <div style={st({ textAlign: 'right' })}>
-              <div className="bri" style={st({ fontSize: 34, fontWeight: 800, color: openConflicts > 0 ? 'var(--err)' : 'var(--t3)', letterSpacing: '-0.06em', lineHeight: 1 })}>{openConflicts}</div>
-              <div style={st({ fontSize: 11, color: 'var(--t3)', marginTop: 3 })}>open conflicts</div>
+              <div className="bri" style={st({ fontSize: 36, fontWeight: 800, color: 'var(--t3)', letterSpacing: '-0.06em', lineHeight: 1 })}>{unlinked.length}</div>
+              <div style={st({ fontSize: 11, color: 'var(--t3)', marginTop: 3 })}>no code yet</div>
+            </div>
+            <div style={st({ textAlign: 'right' })}>
+              <div className="bri" style={st({ fontSize: 36, fontWeight: 800, color: 'var(--ok)', letterSpacing: '-0.06em', lineHeight: 1 })}>{inSync.length}</div>
+              <div style={st({ fontSize: 11, color: 'var(--t3)', marginTop: 3 })}>in sync</div>
             </div>
           </div>
         </div>
-        <div style={st({ display: 'flex', gap: 0, marginTop: 24, borderBottom: '1px solid var(--bd)' })}>
-          {([['all', 'All', liveBRD.requirements.length], ['traced', 'Traced', tracedCount]] as const).map(([k, label, count]) => (
+
+        {/* Filter tabs */}
+        <div style={st({ display: 'flex', gap: 0, marginTop: 32, borderBottom: '1px solid var(--bd)' })}>
+          {filterTabs.map(tab => (
             <button
-              key={k}
-              onClick={() => setFilter(k)}
-              style={st({ padding: '8px 16px', background: 'none', border: 'none', borderBottom: filter === k ? '2px solid var(--t1)' : '2px solid transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: filter === k ? 700 : 500, color: filter === k ? 'var(--t1)' : 'var(--t3)', marginBottom: -1, display: 'flex', alignItems: 'center', gap: 6 })}
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
+              style={st({
+                padding: '8px 16px', background: 'none', border: 'none',
+                borderBottom: filter === tab.key ? '2px solid var(--t1)' : '2px solid transparent',
+                cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 13, fontWeight: filter === tab.key ? 700 : 500,
+                color: filter === tab.key ? 'var(--t1)' : 'var(--t3)',
+                transition: 'all 0.12s', marginBottom: -1,
+                display: 'flex', alignItems: 'center', gap: 6,
+              })}
             >
-              {label}
-              <span style={st({ fontSize: 11, fontWeight: 700, color: 'var(--t3)' })}>{count}</span>
+              {tab.label}
+              <span style={st({
+                fontSize: 11, fontWeight: 700,
+                color: filter === tab.key ? (tab.color || 'var(--t2)') : 'var(--t3)',
+              })}>
+                {tab.count}
+              </span>
             </button>
           ))}
-          <Btn v="ghost" sm onClick={() => setView('document')}><Ico n="arrow-l" s={12} c="var(--t2)" /> Back to document</Btn>
         </div>
       </div>
 
-      {/* Body */}
-      <div style={st({ flex: 1, overflowY: 'auto', padding: '20px 52px 70px' })}>
-        {reqs.length === 0 ? (
-          <div style={st({ paddingTop: 60, textAlign: 'center', color: 'var(--t3)', fontSize: 14 })}>No requirements in this BRD.</div>
-        ) : (
-          <div style={st({ borderTop: '1px solid var(--bd)' })}>
-            {reqs.map(r => (
-              <LiveTraceRow key={r.id} id={r.id} text={r.text} author={r.author} quote={r.sourceQuote} ts={r.timestamp} />
+      {/* Content */}
+      <div style={st({ flex: 1, overflowY: 'auto', padding: '0 52px 80px' })}>
+
+        {/* Contradicted section */}
+        {showContradicted && (contradicted.length > 0 || stale.length > 0) && (
+          <div style={st({ marginTop: 40 })}>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 })}>
+              <Ico n="warning" s={13} c="var(--err)" />
+              <span style={st({ fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--err)' })}>
+                Contradicted — code doesn't match requirement
+              </span>
+            </div>
+            {contradicted.map(r => (
+              <ReqRow
+                key={r.id}
+                id={r.id}
+                title={r.title}
+                status={r.status}
+                prNum={r.code?.pr}
+                prTitle={r.code?.prTitle}
+                onClick={() => goToReq(r.id)}
+              />
+            ))}
+            {stale.map(r => (
+              <ReqRow
+                key={r.id}
+                id={r.id}
+                title={r.title}
+                status="stale"
+                onClick={() => goToReq(r.id)}
+              />
             ))}
           </div>
         )}
-        <div style={st({ marginTop: 26, fontSize: 12, color: 'var(--t3)', display: 'flex', gap: 8, alignItems: 'center' })}>
-          <span style={st({ width: 7, height: 7, borderRadius: '50%', background: 'var(--ok)' })} />
-          Every requirement above is traced live to its source quote, author, and timestamp from “{liveBRD.title}”.
-        </div>
+
+        {/* Orphan code — PRs with no requirement */}
+        {showUnlinked && ORPHAN_PRS.length > 0 && (
+          <div style={st({ marginTop: 48 })}>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 })}>
+              <Ico n="code" s={13} c="var(--t3)" />
+              <span style={st({ fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--t3)' })}>
+                Undocumented code — PRs with no linked requirement
+              </span>
+            </div>
+            {ORPHAN_PRS.map(p => (
+              <PRRow
+                key={p.pr}
+                pr={p.pr}
+                title={p.title}
+                authorId={p.authorId}
+                mergedAt={p.mergedAt}
+                onClick={() => {}}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Unlinked requirements — no code */}
+        {showUnlinked && unlinked.length > 0 && (
+          <div style={st({ marginTop: 48 })}>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 })}>
+              <Ico n="doc" s={13} c="var(--t3)" />
+              <span style={st({ fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--t3)' })}>
+                Requirements with no linked code
+              </span>
+            </div>
+            {unlinked.map(r => (
+              <ReqRow
+                key={r.id}
+                id={r.id}
+                title={r.title}
+                status="unlinked"
+                onClick={() => goToReq(r.id)}
+                action={{ label: 'Link PR', icon: 'link' }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* In sync */}
+        {showInSync && inSync.length > 0 && (
+          <div style={st({ marginTop: 48 })}>
+            <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 })}>
+              <Ico n="check" s={13} c="var(--ok)" />
+              <span style={st({ fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--ok)' })}>
+                In sync
+              </span>
+            </div>
+            {inSync.map(r => (
+              <ReqRow
+                key={r.id}
+                id={r.id}
+                title={r.title}
+                status="in-sync"
+                prNum={r.code?.pr}
+                prTitle={r.code?.prTitle}
+                onClick={() => goToReq(r.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        {reqs.length === 0 && (
+          <div style={st({ paddingTop: 80, textAlign: 'center' })}>
+            <Ico n="shield" s={32} c="var(--bd2)" />
+            <div style={st({ fontSize: 14, color: 'var(--t3)', marginTop: 12 })}>No requirements tracked for this project yet.</div>
+          </div>
+        )}
       </div>
     </div>
   )

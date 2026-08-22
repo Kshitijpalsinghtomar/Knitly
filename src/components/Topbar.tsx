@@ -1,6 +1,6 @@
 import { useApp } from '../context/AppContext'
 import { useTheme } from '../context/ThemeContext'
-import { TEAM, NOTIFICATIONS_DATA } from '../data'
+import { TEAM, PROJECTS, NOTIFICATIONS_DATA } from '../data'
 import { Ico } from './ui/Icon'
 import { AvatarRow } from './ui/Avatar'
 import { Btn } from './ui/Button'
@@ -23,18 +23,18 @@ const VIEW_LABEL: Partial<Record<View, string>> = {
 }
 
 export function Topbar() {
-  const { view, setView, activeProjectId, activeReqId, aiOpen, setAiOpen, setGenOpen, liveBRD } = useApp()
+  const { view, setView, activeProjectId, activeReqId, aiOpen, setAiOpen, setGenOpen } = useApp()
   const { theme, toggle } = useTheme()
   const online = TEAM.filter(t => t.online)
+  const activeProject = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
   const unreadCount = NOTIFICATIONS_DATA.filter(n => !n.read).length
   const showCrumb = PROJECT_CRUMB_VIEWS.includes(view)
 
-  // Deep breadcrumb trail: document > requirement etc. Uses the live BRD title
-  // when open (never the mock project name).
+  // Deep breadcrumb trail: project > document > requirement etc.
   const crumbSegments: { label: string; onClick?: () => void }[] = []
   if (showCrumb) {
     crumbSegments.push({
-      label: liveBRD?.title || 'Documents',
+      label: activeProject.name,
       onClick: () => setView('workspace'),
     })
     if (view === 'document') {
@@ -59,7 +59,7 @@ export function Topbar() {
       {/* Breadcrumb / wordmark */}
       {showCrumb ? (
         <div style={st({ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bd)', borderRadius: 9, padding: '5px 10px', flexShrink: 0 })}>
-          <div style={st({ width: 13, height: 13, borderRadius: 3, background: 'var(--ac)', flexShrink: 0 })} />
+          <div style={st({ width: 13, height: 13, borderRadius: 3, background: activeProject.gradient, flexShrink: 0 })} />
           {crumbSegments.map((seg, i) => (
             <span key={i} style={st({ display: 'flex', alignItems: 'center', gap: 4 })}>
               {i > 0 && <Ico n="chevron-r" s={11} c="var(--t3)" />}
@@ -79,7 +79,7 @@ export function Topbar() {
           ))}
         </div>
       ) : (
-        <span className="bri" style={st({ fontSize: 14, fontWeight: 800, color: 'var(--t3)', letterSpacing: '-0.02em' })}>Ariadne</span>
+        <span className="bri" style={st({ fontSize: 14, fontWeight: 800, color: 'var(--t3)', letterSpacing: '-0.02em' })}>TraceLayer</span>
       )}
 
       {/* Search */}

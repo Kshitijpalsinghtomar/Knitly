@@ -8,7 +8,6 @@ import { DocTag } from '../components/ui/DocTag'
 import { Trace } from '../components/Trace'
 import { st } from '../lib/utils'
 import { computeCompleteness } from '../server/generator'
-import { resolveConflict as persistBRDConflict } from '../lib/api'
 import type { DocMode, AiFlag, BRD, GeneratedRequirement, SourceConflict } from '../types'
 
 // ─── AI Flag inline card ──────────────────────────────────────────────────────
@@ -882,6 +881,7 @@ function ActMode({ doc, m }: { doc: typeof DOCUMENTS[0]; m: typeof DOC_META[keyo
 // ─── Live BRD panel (real generated slice) ───────────────────────────────────
 function LiveBRDPanel() {
   const { liveSource, liveBRD, setLiveBRD, prdUnlocked, setView, activeProjectId, setGenOpen } = useApp()
+  const proj = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
   const [expandedReqs, setExpandedReqs] = useState<Record<string, boolean>>({})
   const [openConflict, setOpenConflict] = useState<string | null>(null)
 
@@ -889,26 +889,23 @@ function LiveBRDPanel() {
   const complete = prdUnlocked
   const openConflicts = liveBRD.conflicts.filter(c => !c.resolved)
 
-  const [conflictBusy, setConflictBusy] = useState<string | null>(null)
-  const resolveConflict = async (id: string) => {
-    if (!liveBRD) return
-    setConflictBusy(id)
-    try {
-      const updated = await persistBRDConflict(liveBRD.id, id, true)
-      setLiveBRD(updated)
-    } catch {
-      /* leave the conflict as-is; the next render reflects server truth */
-    }
-    setConflictBusy(null)
+  const resolveConflict = (id: string) => {
+    setLiveBRD(prev => {
+      if (!prev) return prev
+      const conflicts = prev.conflicts.map(c => (c.id === id ? { ...c, resolved: true } : c))
+      const next: BRD = { ...prev, conflicts }
+      next.complete = computeCompleteness(next)
+      return next
+    })
   }
-  const resetConflict = async (id: string) => {
-    if (!liveBRD) return
-    try {
-      const updated = await persistBRDConflict(liveBRD.id, id, false)
-      setLiveBRD(updated)
-    } catch {
-      /* ignore */
-    }
+  const resetConflict = (id: string) => {
+    setLiveBRD(prev => {
+      if (!prev) return prev
+      const conflicts = prev.conflicts.map(c => (c.id === id ? { ...c, resolved: false } : c))
+      const next: BRD = { ...prev, conflicts }
+      next.complete = computeCompleteness(next)
+      return next
+    })
   }
 
   const goToReq = (id: string) => { setView('requirement') }
@@ -922,7 +919,7 @@ function LiveBRDPanel() {
           <div style={st({ minWidth: 0 })}>
             <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 })}>
               <span style={st({ fontSize: 9, fontWeight: 700, color: 'var(--ai)', background: 'var(--aid)', padding: '2px 7px', borderRadius: 4, letterSpacing: '0.07em' })}>LIVE · GENERATED</span>
-              <span style={st({ fontSize: 12, color: 'var(--t3)' })}>Business Requirements Document</span>
+              <span style={st({ fontSize: 12, color: 'var(--t3)' })}>{proj.name}</span>
             </div>
             <h1 className="bri" style={st({ fontSize: 26, fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.045em', lineHeight: 1.15, margin: '0 0 12px', maxWidth: 640 })}>
               {liveBRD.title}
@@ -1055,44 +1052,46 @@ function LiveBRDPanel() {
 }
 
 // ─── Main DocumentView shell ───────────────────────────────────────────────────
-// Renders the LIVE generated BRD for the currently selected document. There is
-// NO mock fallback: if no real BRD is open, we show an honest empty/load state.
-function NoDocumentOpen({ hasId }: { hasId: boolean }) {
-  const { setGenOpen, cancelDocument, openBRD, activeBRDId } = useApp()
-  return (
-    <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 6 })}>
-      <Trace size={64} mood="thinking" />
-      {hasId ? (
-        <>
-          <p className="bri" style={st({ fontSize: 19, fontWeight: 800, color: 'var(--t1)', margin: '18px 0 6px', letterSpacing: '-0.03em' })}>Couldn’t load this document</p>
-          <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 20px', maxWidth: 380, textAlign: 'center' })}>
-            The BRD didn’t resolve from the server (it may have failed to load). Retry, or go back to your documents.
-          </p>
-          <div style={st({ display: 'flex', gap: 8 })}>
-            <Btn v="primary" onClick={() => { if (activeBRDId) openBRD(activeBRDId) }}><Ico n="refresh" s={12} c="#0F0F0E" /> Retry</Btn>
-            <Btn v="ghost" onClick={cancelDocument}><Ico n="arrow-l" s={12} c="var(--t2)" /> Back to documents</Btn>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="bri" style={st({ fontSize: 19, fontWeight: 800, color: 'var(--t1)', margin: '18px 0 6px', letterSpacing: '-0.03em' })}>No document open</p>
-          <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 20px', maxWidth: 380, textAlign: 'center' })}>
-            Open a BRD from your documents, or generate a new one from a source.
-          </p>
-          <div style={st({ display: 'flex', gap: 8 })}>
-            <Btn v="primary" onClick={() => setGenOpen(true)}><Ico n="sparkle" s={12} c="#0F0F0E" /> Generate a document</Btn>
-            <Btn v="ghost" onClick={cancelDocument}><Ico n="folder" s={12} c="var(--t2)" /> Browse documents</Btn>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 export function DocumentView() {
-  const { liveBRD, activeBRDId } = useApp()
+  const { activeProjectId, liveBRD } = useApp()
+  const [mode, setMode] = useState<DocMode>('brief')
 
   if (liveBRD) return <LiveBRDPanel />
 
-  return <NoDocumentOpen hasId={!!activeBRDId} />
+  const projectDocs = DOCUMENTS.filter(d => d.pid === activeProjectId)
+  const doc = projectDocs[0] || DOCUMENTS[0]
+  const m = DOC_META[doc.type]
+
+  return (
+    <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' })}>
+      {/* Doc toolbar */}
+      <div style={st({ padding: '10px 24px', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12 })}>
+        <div style={st({ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 })}>
+          <DocTag type={doc.type} />
+          <span className="mono" style={st({ fontSize: 10.5, color: 'var(--t3)' })}>v{doc.v}</span>
+          <span style={st({ color: 'var(--bd2)' })}>·</span>
+          <span style={st({ fontSize: 12, color: 'var(--t2)', textTransform: 'capitalize' })}>{doc.status}</span>
+          <span style={st({ color: 'var(--bd2)' })}>·</span>
+          <span style={st({ fontSize: 12, color: 'var(--t3)' })}>{doc.when}</span>
+          {doc.ai && <span style={st({ fontSize: 9, fontWeight: 700, color: 'var(--ai)', background: 'var(--aid)', padding: '2px 6px', borderRadius: 4, letterSpacing: '0.05em' })}>AI</span>}
+        </div>
+        <div style={st({ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 })}>
+          <Btn v="ghost" sm><Ico n="download" s={12} c="var(--t2)" /> Export</Btn>
+          <Btn v="ghost" sm><Ico n="copy" s={12} c="var(--t2)" /> Share</Btn>
+          <div style={st({ display: 'flex', background: 'var(--bg)', borderRadius: 8, padding: 3, border: '1px solid var(--bd)', marginLeft: 4 })}>
+            {([['brief', 'Brief'], ['read', 'Full read'], ['act', 'Review']] as [DocMode, string][]).map(([dm, label]) => (
+              <button key={dm} onClick={() => setMode(dm)}
+                style={st({ padding: '4px 12px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: mode === dm ? 600 : 400, background: mode === dm ? 'var(--sf)' : 'transparent', color: mode === dm ? 'var(--t1)' : 'var(--t3)', fontFamily: 'inherit', whiteSpace: 'nowrap' })}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {mode === 'brief' && <BriefMode doc={doc} m={m} />}
+      {mode === 'read'  && <ReadMode doc={doc} m={m} />}
+      {mode === 'act'   && <ActMode doc={doc} m={m} />}
+    </div>
+  )
 }
