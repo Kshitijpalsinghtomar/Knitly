@@ -42,6 +42,15 @@ import {
   dbConfigured,
   checkDbReachable,
 } from '../src/server/db'
+import {
+  DOCUMENT_TYPES,
+  DOCUMENT_TYPE_IDS,
+  PROVISIONAL_DOWNSTREAM_ORDER,
+  isDocumentTypeId,
+  type DocumentTypeId,
+  type ParentGateInfo,
+} from '../src/lib/documentTypes'
+import { evaluateGate } from '../src/server/gate'
 import type { BRD, ServerStatus, Source, DbHealth } from '../src/types'
 
 const PORT = Number(process.env.PORT || 3000)
@@ -182,6 +191,94 @@ async function handleApi(req: Request): Promise<Response> {
     return json({ brd: fetched.value }, 200)
   }
 
+  // ─── Document-type registry + gate state (feeds Generate Document) ─────────
+  if (url.pathname === '/api/document-types' && req.method === 'GET') {
+    const parentDocumentId = url.searchParams.get('parentDocumentId')
+    const sourceCount = Math.max(0, Number(url.searchParams.get('sourceCount') || 0) || 0)
+    let parent: ParentGateInfo | null = null
+    if (parentDocumentId) {
+      const fetched = await dbWrites(() => getBRD(parentDocumentId))
+      if (!fetched.ok) return json({ error: 'Database unavailable — could not load parent document.', db: await healthStatus() }, 503)
+      if (fetched.value) parent = { id: fetched.value.id, complete: fetched.value.complete }
+    }
+    const types = DOCUMENT_TYPE_IDS.map((t) => ({ ...DOCUMENT_TYPES[t], gate: evaluateGate({ type: t, parent, hasSources: sourceCount > 0 }) }))
+    return json(
+      { types, provisionalDownstreamOrder: [...PROVISIONAL_DOWNSTREAM_ORDER], ...(await healthStatus()) },
+      200
+    )
+  }
+  // ─── Type-safe, gate-enforced document generation ───────────────────────────
+  // New canonical generation endpoint. Accepts requested type, brief, source IDs
+  // and an optional parent document ID. NEVER falls back to the BRD generator
+  // for another requested type: unknown type → 422, locked downstream → 409
+  // with inspectable gate checks. The existing /api/brd/generate remains for
+  // the current frontend (next frontend task will switch it to this endpoint).
+  if (url.pathname === '/api/documents/generate' && req.method === 'POST') {
+    let body: { type?: unknown; brief?: unknown; sourceIds?: unknown; source?: unknown; parentDocumentId?: unknown }
+    try {
+      body = await req.json()
+    } catch {
+      return json({ error: 'Invalid JSON body.' }, 400)
+    }
+    if (!isDocumentTypeId(body.type)) {
+      return json(
+        { error: `Unknown document type "${String(body.type)}". Supported: ${DOCUMENT_TYPE_IDS.join(', ')}.`, code: 'INVALID_TYPE' },
+        422
+      )
+    }
+    const type: DocumentTypeId = body.type
+    const brief = typeof body.brief === 'string' ? body.brief.trim() : ''
+    const parentDocumentId = typeof body.parentDocumentId === 'string' && body.parentDocumentId ? body.parentDocumentId : null
+
+    // BRD is the only implemented / initially-eligible type.
+    if (type === 'brd') {
+      const sourceIds: string[] = Array.isArray(body.sourceIds) ? body.sourceIds.filter((s): s is string => typeof s === 'string') : []
+      const sources: Source[] = []
+      for (const id of sourceIds) {
+        const fetched = await dbWrites(() => getSource(id))
+        if (!fetched.ok) return json({ error: 'Database unavailable — could not load source.', db: await healthStatus() }, 503)
+        if (!fetched.value) return json({ error: `Source not found: ${id}.`, code: 'SOURCE_NOT_FOUND' }, 422)
+        sources.push(fetched.value)
+      }
+      const inlineSource = body.source as Source | undefined
+      if (inlineSource && typeof inlineSource.rawText === 'string' && inlineSource.rawText.trim()) {
+        sources.push(inlineSource)
+      }
+      if (sources.length === 0) {
+        return json(
+          { error: 'At least one source is required to generate a BRD (pass `sourceIds` or a `source`).', code: 'MISSING_SOURCE' },
+          422
+        )
+      }
+      const brd = (await defaultBrdGenerator.generateBRD(sources[0])) as BRD
+      brd.complete = computeCompleteness(brd)
+      brd.type = 'brd'
+      if (brief) brd.brief = brief
+      const saved = await dbWrites(() => saveBRD(brd))
+      if (!saved.ok) return json({ error: 'Database unavailable — could not persist BRD.', db: await healthStatus() }, 503)
+      return json({ brd, type: 'brd', ...(await healthStatus()) }, 200)
+    }
+
+    // Down-stream types: server-enforced gates. Load the parent if given, then
+    // evaluate the gate; a locked type returns 409 (never a BRD).
+    let parent: ParentGateInfo | null = null
+    if (parentDocumentId) {
+      const fetched = await dbWrites(() => getBRD(parentDocumentId))
+      if (!fetched.ok) return json({ error: 'Database unavailable — could not load parent document.', db: await healthStatus() }, 503)
+      if (!fetched.value) return json({ error: `Parent document not found: ${parentDocumentId}.`, code: 'PARENT_NOT_FOUND' }, 422)
+      parent = { id: fetched.value.id, complete: fetched.value.complete }
+    }
+    const gate = evaluateGate({ type, parent, hasSources: false })
+    if (!gate.allowed) {
+      return json({ error: gate.reason, code: 'DOCUMENT_LOCKED', type, gate }, 409)
+    }
+    // Defensive branch — only reachable once a downstream adapter exists and is
+    // marked `implemented` in the registry, with a complete parent supplied.
+    return json(
+      { error: `${DOCUMENT_TYPES[type].name} generation is not implemented yet (no adapter).`, code: 'ADAPTER_NOT_IMPLEMENTED', type, gate },
+      409
+    )
+  }
   if (url.pathname === '/api/brd/generate' && req.method === 'POST') {
     let body: { sourceId?: string; source?: Source }
     try {
@@ -225,7 +322,7 @@ if (dbConfigured()) {
   }
 }
 
-const server = Bun.serve({
+export const server = Bun.serve({
   port: PORT,
   hostname: HOST,
   fetch(req) {

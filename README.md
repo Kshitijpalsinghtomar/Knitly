@@ -34,6 +34,17 @@ transcript (or use the sample) → Generate. You land on the live generated BRD.
   The list/load endpoints and the conflict-resolution PATCH give sources and BRDs a **durable
   lifecycle**: they survive refresh/restart (memory and Neon), and resolving a conflict persists to
   the stored BRD and recomputes its `complete` flag — no longer just React state.
+- **Server-enforced document types & prerequisite gates** — a shared registry
+  (`src/lib/documentTypes.ts`) declares the supported types (BRD, PRD, Tech Spec, User Stories,
+  Roadmap, Research) and the **provisional** downstream order, and `src/server/gate.ts`
+  (`evaluateGate`) enforces it with inspectable checks + human reasons. BRD is the only
+  initially-eligible type; every downstream type is locked (409) until its adapter is implemented
+  AND a complete current BRD parent is supplied. New API: `POST /api/documents/generate` (type-safe,
+  accepts `type`/`brief`/`sourceIds`/`source`/`parentDocumentId`; rejects INVALID_TYPE & missing
+  sources with 422, DOCUMENT_LOCKED with 409 — never silently falls back to BRD) and
+  `GET /api/document-types?sourceCount=&parentDocumentId=` (registry + per-type gate state). The
+  existing `POST /api/brd/generate` remains for the current frontend. Generated BRDs now record
+  `type` and `brief` where the model supports it.
 - **Deterministic BRD generator behind a model-adapter contract** — `src/server/generator.ts`
   defines `BrdGenerator` (with `generateBRD(source) => BRD`), implemented by
   `RuleBasedBrdGenerator`: splits transcript sentences into requirements with inferred
