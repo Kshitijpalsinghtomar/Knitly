@@ -171,6 +171,31 @@ export function RequirementView() {
     )
   }
 
+  // No live BRD context → never fall back to fixture requirements.
+  if (!liveBRD) {
+    return (
+      <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 6 })}>
+        <Ico n="shield" s={40} c="var(--bd2)" />
+        <p className="bri" style={st({ fontSize: 19, fontWeight: 800, color: 'var(--t1)', margin: '18px 0 6px', letterSpacing: '-0.03em' })}>Open a document first</p>
+        <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 20px', maxWidth: 400, textAlign: 'center' })}>
+          Requirement details come from a generated BRD. Open one from your documents.
+        </p>
+        <Btn v="primary" onClick={() => setView('workspace')}><Ico n="folder" s={12} c="#0F0F0E" /> Browse documents</Btn>
+      </div>
+    )
+  }
+
+  return (
+    <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 6 })}>
+      <Ico n="doc" s={40} c="var(--bd2)" />
+      <p className="bri" style={st({ fontSize: 19, fontWeight: 800, color: 'var(--t1)', margin: '18px 0 6px', letterSpacing: '-0.03em' })}>Requirement not found</p>
+      <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 20px', maxWidth: 400, textAlign: 'center' })}>
+        That requirement doesn’t exist in the currently open BRD.
+      </p>
+      <Btn v="primary" onClick={() => { setActiveReqId(null); setView('document') }}><Ico n="arrow-l" s={12} c="#0F0F0E" /> Back to document</Btn>
+    </div>
+  )
+
   const req = REQUIREMENTS_DETAIL.find(r => r.id === activeReqId) || REQUIREMENTS_DETAIL[0]
   const doc = DOCUMENTS.find(d => d.id === req.docId)
   const proj = PROJECTS.find(p => p.id === req.pid)

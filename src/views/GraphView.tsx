@@ -26,6 +26,12 @@ export function GraphView() {
         <div style={st({ marginLeft: 'auto' })}><Btn v="ghost" sm>Export SVG</Btn></div>
       </div>
 
+      {/* Demo notice */}
+      <div style={st({ padding: '6px 24px', fontSize: 12, color: 'var(--warn)', background: 'rgba(230,163,60,0.10)', borderBottom: '1px solid rgba(230,163,60,0.25)', display: 'flex', alignItems: 'center', gap: 8 })}>
+        <Ico n="flask" s={13} c="var(--warn)" />
+        <span><strong>Demo preview.</strong> This graph renders sample nodes — it is not connected to your live sources/documents yet.</span>
+      </div>
+
       <div style={st({ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--bg)', backgroundImage: 'radial-gradient(ellipse 55% 35% at 70% 25%, rgba(91,141,239,0.06) 0%, transparent 55%)' })}>
         <div style={st({ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, var(--bd) 1px, transparent 1px)', backgroundSize: '28px 28px', opacity: 0.5 })} />
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
