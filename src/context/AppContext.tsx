@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import type { BRD, ServerStatus, Source, View } from '../types'
+import { getBRD, getSource } from '../lib/api'
 
 interface AppCtxValue {
   view: View
@@ -17,6 +18,16 @@ interface AppCtxValue {
   setLiveSource: Dispatch<SetStateAction<Source | null>>
   liveBRD: BRD | null
   setLiveBRD: Dispatch<SetStateAction<BRD | null>>
+  /** Id of the BRD currently open in the document viewer (drives navigation). */
+  activeBRDId: string | null
+  setActiveBRDId: (id: string | null) => void
+  /** Persisted source selected for generation (e.g. chosen from a browse list). */
+  activeSource: Source | null
+  setActiveSource: Dispatch<SetStateAction<Source | null>>
+  /** Open a specific persisted BRD by id — resolves + renders IT (not a fixture). */
+  openBRD: (id: string) => Promise<void>
+  /** Navigate back to the browse/list surface for documents & sources. */
+  cancelDocument: () => void
   serverStatus: ServerStatus
   setServerStatus: Dispatch<SetStateAction<ServerStatus>>
   /** Ariadne gate: PRD is only unlocked once the live BRD is complete. */
@@ -38,6 +49,12 @@ const AppCtx = createContext<AppCtxValue>({
   setLiveSource: () => {},
   liveBRD: null,
   setLiveBRD: () => {},
+  activeBRDId: null,
+  setActiveBRDId: () => {},
+  activeSource: null,
+  setActiveSource: () => {},
+  openBRD: () => Promise.resolve(),
+  cancelDocument: () => {},
   serverStatus: { ok: false, dbConfigured: false, mode: 'offline', detail: 'Backend not checked yet.' },
   setServerStatus: () => {},
   prdUnlocked: false,
@@ -51,12 +68,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [genOpen, setGenOpen] = useState(false)
   const [liveSource, setLiveSource] = useState<Source | null>(null)
   const [liveBRD, setLiveBRD] = useState<BRD | null>(null)
+  const [activeBRDId, setActiveBRDId] = useState<string | null>(null)
+  const [activeSource, setActiveSource] = useState<Source | null>(null)
   const [serverStatus, setServerStatus] = useState<ServerStatus>({
     ok: false,
     dbConfigured: false,
     mode: 'offline',
     detail: 'Backend not checked yet.',
   })
+
+  const openBRD = async (id: string) => {
+    setActiveBRDId(id)
+    setActiveReqId(null)
+    // Resolve the full BRD (its own requirements/conflicts) so the viewer is real.
+    try {
+      const brd = await getBRD(id)
+      setLiveBRD(brd)
+      if (brd.sourceId) {
+        try {
+          const src = await getSource(brd.sourceId)
+          setLiveSource(src)
+        } catch {
+          /* source title is best-effort */
+        }
+      }
+    } catch {
+      // Leave liveBRD as-is; viewer will show a load error with retry.
+      setLiveBRD(null)
+    }
+    setView('document')
+  }
+
+  const cancelDocument = () => {
+    setLiveBRD(null)
+    setActiveBRDId(null)
+    setActiveReqId(null)
+    setView('workspace')
+  }
 
   return (
     <AppCtx.Provider
@@ -68,6 +116,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         genOpen, setGenOpen,
         liveSource, setLiveSource,
         liveBRD, setLiveBRD,
+        activeBRDId, setActiveBRDId,
+        activeSource, setActiveSource,
+        openBRD, cancelDocument,
         serverStatus, setServerStatus,
         prdUnlocked: !!liveBRD?.complete,
       }}

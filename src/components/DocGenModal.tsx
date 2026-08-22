@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { DOC_META } from '../data'
 import { useApp } from '../context/AppContext'
-import { saveSource, requestBRD } from '../lib/api'
+import { saveSource, generateDocument } from '../lib/api'
 import { Ico } from './ui/Icon'
 import { Btn } from './ui/Button'
 import { Trace } from './Trace'
@@ -25,7 +25,7 @@ Omar: The checkout UI must be WCAG 2.1 AA accessible.
 Katrina: We must not charge users for payment method storage.`
 
 export function DocGenModal({ onClose, onGenerate }: Props) {
-  const { prdUnlocked, setLiveSource, setLiveBRD, setServerStatus, setGenOpen } = useApp()
+  const { prdUnlocked, setLiveSource, setLiveBRD, setServerStatus, setGenOpen, setActiveBRDId, activeSource } = useApp()
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [docType, setDocType] = useState<DocType | null>(null)
   const [brief, setBrief] = useState('')
@@ -36,7 +36,7 @@ export function DocGenModal({ onClose, onGenerate }: Props) {
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const canGenerate = transcript.trim().length > 0
+  const canGenerate = !!activeSource || transcript.trim().length > 0
   const isPrd = docType === 'prd'
   const prdLocked = isPrd && !prdUnlocked
 
@@ -56,12 +56,23 @@ export function DocGenModal({ onClose, onGenerate }: Props) {
     const timer = setInterval(tick, 420)
 
     try {
-      const { source, status } = await saveSource({ title: title.trim() || brief.trim().slice(0, 60) || 'Ingested transcript', rawText: transcript, author: 'Current user' })
-      setServerStatus(status)
-      setLiveSource(source)
-      const { brd, status: genStatus } = await requestBRD(source)
+      let source = activeSource
+      if (!source) {
+        const saved = await saveSource({ title: title.trim() || brief.trim().slice(0, 60) || 'Ingested transcript', rawText: transcript, author: 'Current user' })
+        setServerStatus(saved.status)
+        setLiveSource(saved.source)
+        source = saved.source
+      }
+      // Persist + generate via the canonical gate-enforced endpoint. When an
+      // existing source is selected, generate from it by id (never re-upload).
+      const { brd, status: genStatus } = await generateDocument({
+        type: 'brd',
+        sourceIds: source ? [source.id] : [],
+      })
       setServerStatus(genStatus)
+      setLiveSource(source)
       setLiveBRD(brd)
+      setActiveBRDId(brd.id)
       clearInterval(timer)
       setGenProgress(100)
       setTimeout(() => { setGenOpen(false); onGenerate() }, 350)
@@ -155,6 +166,13 @@ export function DocGenModal({ onClose, onGenerate }: Props) {
                   {error}
                 </div>
               )}
+              {activeSource && (
+                <div style={st({ marginBottom: 16, padding: '12px 14px', background: 'rgba(78,173,121,0.08)', border: '1px solid rgba(78,173,121,0.28)', borderRadius: 12, fontSize: 12.5, color: 'var(--t2)', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 10 })}>
+                  <Ico n="doc" s={16} c="var(--ok)" />
+                  <span>Generating a BRD from existing source <strong style={st({ fontWeight: 600, color: 'var(--t1)' })}>{activeSource.title}</strong> — no need to paste again.</span>
+                </div>
+              )}
+              {!activeSource && (<>
               <label style={st({ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--t1)', marginBottom: 6 })}>Source title</label>
               <input
                 value={title}
@@ -180,6 +198,7 @@ export function DocGenModal({ onClose, onGenerate }: Props) {
                 </button>
                 <span style={st({ fontSize: 11, color: 'var(--t3)' })}>{transcript.length} chars</span>
               </div>
+              </>)}
               <div style={st({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 })}>
                 <button onClick={() => setStep(2)} style={st({ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--t3)', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit' })}>
                   <Ico n="arrow-l" s={14} c="var(--t3)" /> Back

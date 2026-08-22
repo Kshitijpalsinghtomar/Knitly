@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { PROJECTS, NOTIFICATIONS_DATA } from '../data'
 import { Ico } from './ui/Icon'
 import { Avatar } from './ui/Avatar'
 import { st } from '../lib/utils'
@@ -41,77 +40,9 @@ function RailBtn({ icon, label, active, onClick, badge }: {
   )
 }
 
-function ProjectPicker() {
-  const { activeProjectId, setActiveProjectId, setView } = useApp()
-  const [open, setOpen] = useState(false)
-  const active = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
-
-  const pick = (id: string) => {
-    setActiveProjectId(id)
-    setView('workspace')
-    setOpen(false)
-  }
-
-  return (
-    <div style={st({ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' })}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        title={active.name}
-        style={st({
-          width: 40, height: 40, borderRadius: 11, background: active.gradient,
-          border: open ? '2px solid var(--ac)' : '2px solid transparent',
-          cursor: 'pointer', flexShrink: 0, transition: 'border-color 0.15s',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        })}
-      >
-        <Ico n="chevron-d" s={12} c="rgba(255,255,255,0.8)" />
-      </button>
-
-      {open && (
-        <div
-          className="project-picker-dropdown"
-          style={st({
-            position: 'absolute', left: 'calc(100% + 8px)', top: 0,
-            background: 'var(--sf)', border: '1.5px solid var(--bd2)',
-            borderRadius: 14, padding: 8, zIndex: 300,
-            boxShadow: 'var(--sh2)', minWidth: 200,
-          })}
-        >
-          <p style={st({ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--t3)', margin: '4px 8px 8px' })}>
-            Switch project
-          </p>
-          {PROJECTS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => pick(p.id)}
-              style={st({
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                padding: '9px 10px', borderRadius: 10,
-                background: p.id === activeProjectId ? 'var(--acd)' : 'none',
-                border: 'none', cursor: 'pointer', textAlign: 'left',
-                fontFamily: 'inherit', transition: 'background 0.1s',
-              })}
-              onMouseEnter={e => { if (p.id !== activeProjectId) (e.currentTarget as HTMLElement).style.background = 'var(--bd)' }}
-              onMouseLeave={e => { if (p.id !== activeProjectId) (e.currentTarget as HTMLElement).style.background = 'none' }}
-            >
-              <div style={st({ width: 28, height: 28, borderRadius: 8, background: p.gradient, flexShrink: 0 })} />
-              <div>
-                <div style={st({ fontSize: 13, fontWeight: 600, color: 'var(--t1)', lineHeight: 1.2 })}>{p.name}</div>
-                <div style={st({ fontSize: 11, color: 'var(--t3)', textTransform: 'capitalize' })}>{p.status}</div>
-              </div>
-              {p.id === activeProjectId && <Ico n="check" s={13} c="var(--ac)" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function LeftRail() {
-  const { view, setView, activeProjectId } = useApp()
-  const activeProject = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
-  const unreadCount = NOTIFICATIONS_DATA.filter(n => !n.read).length
+  const { view, setView, liveBRD } = useApp()
+  const openConflicts = liveBRD?.conflicts.filter(c => !c.resolved).length ?? 0
 
   const inProjectView = PROJECT_VIEWS.includes(view)
 
@@ -140,19 +71,17 @@ export function LeftRail() {
 
       {/* Global nav */}
       <RailBtn icon="home"   label="Home"          active={view === 'home'}      onClick={() => setView('home')} />
-      <RailBtn icon="folder" label="All projects"  active={view === 'projects'}  onClick={() => setView('projects')} />
+      <RailBtn icon="folder" label="All sources"   active={view === 'projects'}  onClick={() => setView('projects')} />
       <RailBtn icon="book"   label="Knowledge base" active={view === 'knowledge'} onClick={() => setView('knowledge')} />
 
       {/* Divider */}
       <div style={st({ height: 1, width: 30, background: 'var(--bd)', margin: '6px 0' })} />
 
-      {/* Project section */}
-      <ProjectPicker />
-      <RailBtn icon="overview" label="Project docs"  active={view === 'workspace'}    onClick={() => { setView('workspace') }} />
-      <RailBtn icon="plug"     label="Integrations"  active={view === 'integrations'} onClick={() => setView('integrations')} />
-      <RailBtn icon="network"  label="Graph"         active={view === 'graph'}        onClick={() => setView('graph')} />
-      <RailBtn icon="warning"  label="Conflicts"     active={view === 'conflicts'}    onClick={() => setView('conflicts')} badge={activeProject.conflicts} />
-      <RailBtn icon="shield"   label="Traceability"  active={view === 'traceability' || view === 'requirement'}  onClick={() => setView('traceability')} />
+      {/* Document / context section */}
+      <RailBtn icon="overview" label="Documents"    active={view === 'workspace'} onClick={() => { setView('workspace') }} />
+      <RailBtn icon="network"  label="Graph"        active={view === 'graph'}     onClick={() => setView('graph')} />
+      <RailBtn icon="warning"  label="Conflicts"    active={view === 'conflicts'} onClick={() => setView('conflicts')} badge={openConflicts} />
+      <RailBtn icon="shield"   label="Traceability" active={view === 'traceability' || view === 'requirement'} onClick={() => setView('traceability')} />
 
       {/* Bottom */}
       <div style={st({ marginTop: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 })}>
