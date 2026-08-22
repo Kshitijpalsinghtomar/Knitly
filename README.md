@@ -29,7 +29,11 @@ transcript (or use the sample) → Generate. You land on the live generated BRD.
 - **Server-side persistence contract** — `src/server/db.ts` mirrors the team's shared-site Neon
   helper: lazy `process.env.DATABASE_URL`, in-memory fallback when unset, clear "database not
   configured" state in the UI (`src/App.tsx` banner). `server/index.ts` (Bun) serves `dist/` and
-  the API: `POST /api/sources`, `POST /api/brd/generate`, `GET /api/health`.
+  the API: `POST /api/sources`, `GET /api/sources`, `GET /api/sources/:id`, `POST /api/brd/generate`,
+  `GET /api/brds`, `GET /api/brds/:id`, `PATCH /api/brds/:id/conflicts/:conflictId`, `GET /api/health`.
+  The list/load endpoints and the conflict-resolution PATCH give sources and BRDs a **durable
+  lifecycle**: they survive refresh/restart (memory and Neon), and resolving a conflict persists to
+  the stored BRD and recomputes its `complete` flag — no longer just React state.
 - **Deterministic BRD generator behind a model-adapter contract** — `src/server/generator.ts`
   defines `BrdGenerator` (with `generateBRD(source) => BRD`), implemented by
   `RuleBasedBrdGenerator`: splits transcript sentences into requirements with inferred

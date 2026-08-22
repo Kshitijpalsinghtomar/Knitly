@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import type { BRD, Source } from '../types'
+import { computeCompleteness } from './generator'
 
 /**
  * Server-only database handle for Ariadne persistence.
@@ -136,6 +137,22 @@ export async function getSource(id: string): Promise<Source | null> {
   return memory.sources.get(id) ?? null
 }
 
+/** List all persisted sources, newest first. */
+export async function listSources(): Promise<Source[]> {
+  if (dbConfigured()) {
+    const sql = lazySql()
+    const rows = await (sql`select id, title, raw_text, author, created_at from sources order by created_at desc` as Promise<Rows>)
+    return rows.map((r) => ({
+      id: String(r.id),
+      title: String(r.title),
+      rawText: String(r.raw_text),
+      author: String(r.author),
+      created_at: String(r.created_at),
+    }))
+  }
+  return Array.from(memory.sources.values()).reverse()
+}
+
 export async function saveBRD(brd: BRD): Promise<{ mode: 'db' | 'memory' }> {
   if (dbConfigured()) {
     const sql = lazySql()
@@ -155,4 +172,47 @@ export async function getBRD(id: string): Promise<BRD | null> {
     return rows[0] ? (rows[0].payload as BRD) : null
   }
   return memory.brds.get(id) ?? null
+}
+
+/** List all persisted BRDs, newest first. */
+export async function listBRDs(): Promise<BRD[]> {
+  if (dbConfigured()) {
+    const sql = lazySql()
+    const rows = await (sql`select payload from brds order by created_at desc` as Promise<Rows>)
+    return rows.map((r) => r.payload as BRD)
+  }
+  return Array.from(memory.brds.values()).reverse()
+}
+
+/**
+ * Outcome of persisting a resolved conflict. Distinguishes "document not found"
+ * from "conflict not found" so the API can return a precise 404.
+ */
+export type ResolveBRDConflictResult =
+  | { ok: true; brd: BRD; mode: 'db' | 'memory' }
+  | { ok: false; reason: 'brd' | 'conflict' }
+
+/**
+ * Durable conflict resolution: load the BRD, flip the given conflict's
+ * `resolved` flag, recompute `complete` (via `computeCompleteness`), and persist
+ * the updated payload (upsert) so the resolution survives restart. Works in both
+ * memory and Neon modes.
+ *
+ * Returns `{ ok: false, reason: 'brd' }` if the document does not exist and
+ * `{ ok: false, reason: 'conflict' }` if the BRD exists but the conflict id is
+ * unknown.
+ */
+export async function resolveBRDConflict(
+  brdId: string,
+  conflictId: string,
+  resolved: boolean
+): Promise<ResolveBRDConflictResult> {
+  const brd = await getBRD(brdId)
+  if (!brd) return { ok: false, reason: 'brd' }
+  const conflict = brd.conflicts.find((c) => c.id === conflictId)
+  if (!conflict) return { ok: false, reason: 'conflict' }
+  conflict.resolved = resolved
+  brd.complete = computeCompleteness(brd)
+  const { mode } = await saveBRD(brd)
+  return { ok: true, brd, mode }
 }
