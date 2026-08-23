@@ -6,7 +6,8 @@
  *                              falling back to an in-memory store when unset)
  *   - `GET  /api/sources`      list persisted sources (newest first)
  *   - `GET  /api/sources/:id`  load a single source by id
- *   - `POST /api/brd/generate` run the deterministic rule-based BRD generator
+ *   - `POST /api/brd/generate` run the configured BRD generator (real Claude
+ *                              when ANTHROPIC_API_KEY is set, else deterministic)
  *   - `GET  /api/brds`         list persisted BRDs (newest first)
  *   - `GET  /api/brds/:id`     load a single BRD by id
  *   - `PATCH /api/brds/:id/conflicts/:conflictId` persist a conflict resolution
@@ -17,10 +18,12 @@
  * Run: `pnpm build && pnpm start`  (serves on 0.0.0.0:3000 by default).
  * Override the bound port with `PORT` (for local testing).
  *
- * The generator behind `/api/brd/generate` is the `BrdGenerator` contract in
- * `src/server/generator.ts`. It is currently `RuleBasedBrdGenerator` (no AI key
- * required). A real model adapter implements the same interface and plugs in
- * here later.
+ * The generator behind the generation endpoints is the `BrdGenerator` contract
+ * in `src/server/generator.ts`, selected by `createBrdGenerator()`: a real
+ * Claude adapter (`AiBrdGenerator`, src/server/ai-generator.ts) when
+ * ANTHROPIC_API_KEY is set — which verifies every source quote server-side and
+ * falls back to the deterministic `RuleBasedBrdGenerator` on any failure — or
+ * the deterministic generator directly when no key is configured.
  *
  * Startup is deterministic: schema initialization (CREATE TABLE IF NOT EXISTS)
  * is AWAITED before the server accepts requests, so the first DB-backed write
@@ -29,7 +32,9 @@
  * with db.ready=false and DB-backed writes return a clean 503 (persistence
  * errors are observable, never silently swallowed).
  */
-import { defaultBrdGenerator, computeCompleteness } from '../src/server/generator'
+import { computeCompleteness, enrichGeneratedDoc } from '../src/server/generator'
+import { createBrdGenerator, activeGeneratorLabel } from '../src/server/ai-generator'
+import { createDocumentGenerator, activeDocumentGeneratorLabel, type DownstreamTypeId } from '../src/server/document-generator'
 import {
   createSource,
   getSource,
@@ -51,11 +56,40 @@ import {
   type ParentGateInfo,
 } from '../src/lib/documentTypes'
 import { evaluateGate } from '../src/server/gate'
+import {
+  createIntegrationProvider,
+  activeIntegrationProviderLabel,
+  assembleTranscript,
+} from '../src/server/integrations'
+import { isIntegrationId } from '../src/lib/integrationTypes'
 import type { BRD, ServerStatus, Source, DbHealth } from '../src/types'
 
-const PORT = Number(process.env.PORT || 3000)
+// API_PORT wins when set (dev: Vite owns PORT, the API binds a distinct port
+// and Vite proxies /api to it). Falls back to PORT (single-server production,
+// where this process serves both dist/ and /api) and finally 3000.
+const PORT = Number(process.env.API_PORT || process.env.PORT || 3000)
 const HOST = '0.0.0.0'
 const DIST = `${import.meta.dir}/../dist`
+
+// The BRD generator behind the generation endpoints. Real Claude when
+// ANTHROPIC_API_KEY is set (with automatic rule-based fallback on any failure),
+// otherwise the deterministic rule-based generator. Selected once at startup;
+// the label is safe to expose (never contains the key).
+const generator = createBrdGenerator()
+const GENERATOR_LABEL = activeGeneratorLabel()
+
+// The downstream document generator (PRD/spec/stories/roadmap/research) behind
+// the same swappable seam. Turns a COMPLETE parent BRD into a fully-traced
+// downstream document; real Claude when a key is set, else deterministic.
+const documentGenerator = createDocumentGenerator()
+const DOC_GENERATOR_LABEL = activeDocumentGeneratorLabel()
+
+// The integration provider behind the source picker (list/connect/signals/
+// ingest). Demo provider today (realistic sample signals, zero secrets); a real
+// Composio adapter plugs into the same seam. Singleton so connection state
+// persists across requests. The label is safe to expose (never a key).
+const integrations = createIntegrationProvider()
+const INTEGRATION_LABEL = activeIntegrationProviderLabel()
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -117,7 +151,7 @@ async function handleApi(req: Request): Promise<Response> {
   const url = new URL(req.url)
 
   if (url.pathname === '/api/health' && req.method === 'GET') {
-    return json({ ...(await healthStatus()), generator: 'rule-based' })
+    return json({ ...(await healthStatus()), generator: GENERATOR_LABEL, documentGenerator: DOC_GENERATOR_LABEL, integrations: INTEGRATION_LABEL })
   }
 
   if (url.pathname === '/api/sources' && req.method === 'POST') {
@@ -191,6 +225,50 @@ async function handleApi(req: Request): Promise<Response> {
     return json({ brd: fetched.value }, 200)
   }
 
+  // ─── Integrations: connect + browse signals + ingest into a Source ─────────
+  // The source side of the loop. Demo provider today (sample signals, no
+  // secrets); a real Composio adapter fills the same seam. Connect/disconnect
+  // mutate in-process state; ingest turns chosen signals into a persisted Source
+  // the generate journey then builds a BRD from.
+  if (url.pathname === '/api/integrations' && req.method === 'GET') {
+    return json({ integrations: await integrations.listAccounts(), provider: INTEGRATION_LABEL, ...(await healthStatus()) }, 200)
+  }
+
+  const connectMatch = url.pathname.match(/^\/api\/integrations\/([^/]+)\/(connect|disconnect)$/)
+  if (connectMatch && req.method === 'POST') {
+    const id = decodeURIComponent(connectMatch[1])
+    if (!isIntegrationId(id)) return json({ error: `Unknown integration "${id}".`, code: 'UNKNOWN_INTEGRATION' }, 422)
+    const account = connectMatch[2] === 'connect' ? await integrations.connect(id) : await integrations.disconnect(id)
+    return json({ integration: account }, 200)
+  }
+
+  const signalsMatch = url.pathname.match(/^\/api\/integrations\/([^/]+)\/signals$/)
+  if (signalsMatch && req.method === 'GET') {
+    const id = decodeURIComponent(signalsMatch[1])
+    if (!isIntegrationId(id)) return json({ error: `Unknown integration "${id}".`, code: 'UNKNOWN_INTEGRATION' }, 422)
+    return json({ signals: await integrations.listSignals(id) }, 200)
+  }
+
+  // Assemble chosen signals into one transcript and persist it as a Source.
+  if (url.pathname === '/api/integrations/ingest' && req.method === 'POST') {
+    let body: { signalIds?: unknown; title?: unknown; author?: unknown }
+    try {
+      body = await req.json()
+    } catch {
+      return json({ error: 'Invalid JSON body.' }, 400)
+    }
+    const signalIds: string[] = Array.isArray(body.signalIds) ? body.signalIds.filter((s): s is string => typeof s === 'string') : []
+    if (signalIds.length === 0) return json({ error: 'Select at least one signal to pull.', code: 'NO_SIGNALS' }, 422)
+    const chosen = await integrations.getSignalsContent(signalIds)
+    if (chosen.length === 0) return json({ error: 'None of the selected signals are available (is the account still connected?).', code: 'SIGNALS_UNAVAILABLE' }, 422)
+    const rawText = assembleTranscript(chosen)
+    const title = (typeof body.title === 'string' && body.title.trim()) || `${chosen.length} signal${chosen.length === 1 ? '' : 's'} — ${chosen[0].title}`
+    const author = (typeof body.author === 'string' && body.author.trim()) || 'Current user'
+    const written = await dbWrites(() => createSource({ title, rawText, author }))
+    if (!written.ok) return json({ error: 'Database unavailable — could not persist the pulled source.', db: await healthStatus() }, 503)
+    return json({ source: written.value.source, signalCount: chosen.length, ...(await healthStatus()) }, 201)
+  }
+
   // ─── Document-type registry + gate state (feeds Generate Document) ─────────
   if (url.pathname === '/api/document-types' && req.method === 'GET') {
     const parentDocumentId = url.searchParams.get('parentDocumentId')
@@ -250,34 +328,43 @@ async function handleApi(req: Request): Promise<Response> {
           422
         )
       }
-      const brd = (await defaultBrdGenerator.generateBRD(sources[0])) as BRD
+      const brd = (await generator.generateBRD(sources[0])) as BRD
       brd.complete = computeCompleteness(brd)
       brd.type = 'brd'
       if (brief) brd.brief = brief
-      const saved = await dbWrites(() => saveBRD(brd))
+      // Structure the flat requirements into a real, sectioned document (+summary)
+      // before persisting so every consumer — reload, export, viewer — sees it.
+      const enriched = enrichGeneratedDoc(brd)
+      const saved = await dbWrites(() => saveBRD(enriched))
       if (!saved.ok) return json({ error: 'Database unavailable — could not persist BRD.', db: await healthStatus() }, 503)
-      return json({ brd, type: 'brd', ...(await healthStatus()) }, 200)
+      return json({ brd: enriched, type: 'brd', ...(await healthStatus()) }, 200)
     }
 
-    // Down-stream types: server-enforced gates. Load the parent if given, then
-    // evaluate the gate; a locked type returns 409 (never a BRD).
-    let parent: ParentGateInfo | null = null
+    // Down-stream types: server-enforced gates. Load the full parent BRD if
+    // given, evaluate the gate, and on success run the downstream generator so
+    // every item derives from a real parent requirement. A locked type returns
+    // 409 (never a BRD, never another type's generator).
+    let parentBrd: BRD | null = null
     if (parentDocumentId) {
       const fetched = await dbWrites(() => getBRD(parentDocumentId))
       if (!fetched.ok) return json({ error: 'Database unavailable — could not load parent document.', db: await healthStatus() }, 503)
       if (!fetched.value) return json({ error: `Parent document not found: ${parentDocumentId}.`, code: 'PARENT_NOT_FOUND' }, 422)
-      parent = { id: fetched.value.id, complete: fetched.value.complete }
+      parentBrd = fetched.value
     }
+    const parent = parentBrd ? { id: parentBrd.id, complete: parentBrd.complete } : null
     const gate = evaluateGate({ type, parent, hasSources: false })
     if (!gate.allowed) {
       return json({ error: gate.reason, code: 'DOCUMENT_LOCKED', type, gate }, 409)
     }
-    // Defensive branch — only reachable once a downstream adapter exists and is
-    // marked `implemented` in the registry, with a complete parent supplied.
-    return json(
-      { error: `${DOCUMENT_TYPES[type].name} generation is not implemented yet (no adapter).`, code: 'ADAPTER_NOT_IMPLEMENTED', type, gate },
-      409
-    )
+    // Gate passed ⇒ a complete parent BRD is guaranteed present.
+    const doc = (await documentGenerator.generateDocument({ type: type as DownstreamTypeId, parent: parentBrd as BRD, brief })) as BRD
+    doc.type = type
+    if (brief) doc.brief = brief
+    doc.complete = computeCompleteness(doc)
+    const enrichedDoc = enrichGeneratedDoc(doc)
+    const savedDoc = await dbWrites(() => saveBRD(enrichedDoc))
+    if (!savedDoc.ok) return json({ error: 'Database unavailable — could not persist document.', db: await healthStatus() }, 503)
+    return json({ brd: enrichedDoc, type, ...(await healthStatus()) }, 200)
   }
   if (url.pathname === '/api/brd/generate' && req.method === 'POST') {
     let body: { sourceId?: string; source?: Source }
@@ -294,12 +381,13 @@ async function handleApi(req: Request): Promise<Response> {
     }
     if (!source) return json({ error: 'A source is required (pass `source` or a persisted `sourceId`).' }, 400)
 
-    const brd = (await defaultBrdGenerator.generateBRD(source)) as BRD
+    const brd = (await generator.generateBRD(source)) as BRD
     brd.complete = computeCompleteness(brd)
+    const enriched = enrichGeneratedDoc(brd)
 
-    const saved = await dbWrites(() => saveBRD(brd))
+    const saved = await dbWrites(() => saveBRD(enriched))
     if (!saved.ok) return json({ error: 'Database unavailable — could not persist BRD.', db: await healthStatus() }, 503)
-    return json({ brd, ...(await healthStatus()) }, 200)
+    return json({ brd: enriched, ...(await healthStatus()) }, 200)
   }
 
   return json({ error: 'Not found' }, 404)
@@ -340,5 +428,5 @@ export const server = Bun.serve({
   },
 })
 
-console.log(`Ariadne (Knitly) serving on http://${HOST}:${PORT} — generator: rule-based`)
+console.log(`Ariadne (Knitly) serving on http://${HOST}:${PORT} — generator: ${GENERATOR_LABEL}`)
 console.log(`Persistence: ${dbConfigured() ? `Neon (DATABASE_URL) — schema ${startupDb.ready ? 'ready' : 'init FAILED'}` : 'in-memory (set DATABASE_URL for durable storage)'}`)

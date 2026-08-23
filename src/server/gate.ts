@@ -10,8 +10,9 @@
  *     at least one source is supplied.
  *   - Every downstream type (PRD, Tech Spec, User Stories, Roadmap, Research)
  *     is LOCKED until BOTH: its generator adapter is implemented, AND a valid,
- *     complete, current BRD parent is provided. Today no downstream adapter is
- *     implemented, so these never generate — the reason says so honestly.
+ *     complete, current BRD parent is provided. All downstream adapters now
+ *     exist (src/server/document-generator.ts), so the binding gate is the
+ *     COMPLETE-parent requirement — the reason says exactly which check fails.
  *
  * The order/eligibility lives in `PROVISIONAL_DOWNSTREAM_ORDER` and
  * `DOCUMENT_TYPES` (shared registry). This function reads those; it does not

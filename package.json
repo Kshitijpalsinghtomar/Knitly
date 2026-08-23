@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:api": "bun run server/dev.ts",
     "build": "vite build",
     "preview": "vite preview",
     "start": "bun run server/index.ts",

@@ -34,6 +34,14 @@ export default defineConfig(({ mode }) => {
       port: parseInt(process.env.PORT || '8443'),
       strictPort: true,
       watch: { ignored: ['**/.figma/**'] },
+      // Forward API calls to the Bun backend (run `pnpm dev:api`). Keeps the
+      // frontend same-origin in the browser while the API lives on its own port.
+      proxy: {
+        '/api': {
+          target: `http://127.0.0.1:${process.env.API_PORT || '3000'}`,
+          changeOrigin: true,
+        },
+      },
     },
     preview: {
       host: '0.0.0.0',

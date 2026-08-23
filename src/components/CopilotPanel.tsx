@@ -73,7 +73,7 @@ function TypingDots() {
 }
 
 export function CopilotPanel() {
-  const { activeProjectId, setView, setActiveReqId } = useApp()
+  const { activeProjectId, setView, setActiveReqId, setAiOpen } = useApp()
   const activeProject = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState(INITIAL_MSGS)
@@ -143,7 +143,8 @@ export function CopilotPanel() {
           </div>
         </div>
         <button
-          onClick={() => setView('home')}
+          onClick={() => setAiOpen(false)}
+          title="Close Trace"
           style={st({ background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, color: 'var(--t3)' })}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--t1)' }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--t3)' }}

@@ -7,7 +7,7 @@ import { Btn } from '../components/ui/Button'
 import { DocTag } from '../components/ui/DocTag'
 import { Trace } from '../components/Trace'
 import { st } from '../lib/utils'
-import type { IcoName } from '../types'
+import type { BRD, IcoName } from '../types'
 
 const PROJ_COLOR: Record<string, string> = { p1: '#F5A623', p2: '#5B8DEF', p3: '#E05F6A' }
 const DOC_COLORS: Record<string, string> = { brd: '#F5A623', prd: '#5B8DEF', spec: '#4EAD79', stories: '#9B6FE8', roadmap: '#E05F6A', research: '#E0823A' }
@@ -108,13 +108,26 @@ const VERB_COLOR: Record<string, string> = {
 }
 
 export function HomeView() {
-  const { setView, setActiveProjectId, setGenOpen } = useApp()
+  const { setView, setActiveProjectId, setGenOpen, liveDocs, liveBRD, setActiveDocId } = useApp()
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
+  const openLiveDoc = (id: string) => {
+    setActiveDocId(id)
+    setView('document')
+  }
+
+  // A "sample" document row has no live counterpart to render. Rather than open
+  // the viewer on a stale/empty doc, land on the real live chain when one exists,
+  // otherwise take the user straight to the generator.
+  const openDocSurface = () => {
+    if (liveBRD) { setActiveDocId(liveBRD.id); setView('document') }
+    else setGenOpen(true)
+  }
+
   const alertItems: AlertItem[] = [
     { icon: 'warning', text: '4 conflicts need sorting', sub: 'Checkout Flow v2', color: 'var(--err)', action: () => { setActiveProjectId('p1'); setView('conflicts') } },
-    { icon: 'bell', text: 'James is waiting on your review', sub: 'Multi-Currency PRD · 1h ago', color: 'var(--ac)', action: () => { setActiveProjectId('p1'); setView('document') } },
+    { icon: 'bell', text: 'James is waiting on your review', sub: 'Multi-Currency PRD · 1h ago', color: 'var(--ac)', action: () => { setActiveProjectId('p1'); openDocSurface() } },
     { icon: 'sparkle', text: 'Trace found 14 new requirements', sub: 'Slack sync · just now', color: 'var(--ai)', action: () => { setActiveProjectId('p1'); setView('workspace') } },
     { icon: 'check', text: 'CON-002 was resolved', sub: 'fraud latency conflict · 12m ago', color: 'var(--ok)', action: () => { setActiveProjectId('p1'); setView('conflicts') } },
   ]
@@ -144,6 +157,26 @@ export function HomeView() {
 
           {/* Left column */}
           <section style={st({ padding: '8px 52px 54px' })}>
+
+            {/* Live documents — the real (non-mock) ingest→BRD→downstream chain,
+                rehydrated from the server so it survives reloads and is always
+                reachable. Only shown once something real has been generated. */}
+            {liveDocs.length > 0 && (
+              <section style={st({ marginBottom: 40 })}>
+                <div style={st({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 })}>
+                  <span className="mono" style={st({ fontSize: 10, fontWeight: 600, color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase' })}>Your live documents</span>
+                  <span style={st({ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 20, background: 'var(--aid)' })}>
+                    <span style={st({ width: 6, height: 6, borderRadius: '50%', background: 'var(--ai)' })} />
+                    <span style={st({ fontSize: 10, fontWeight: 600, color: 'var(--ai)' })}>Trace</span>
+                  </span>
+                </div>
+                <div style={st({ borderTop: '1px solid var(--bd)' })}>
+                  {liveDocs.map(doc => (
+                    <LiveDocRow key={doc.id} doc={doc} onClick={() => openLiveDoc(doc.id)} />
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Projects */}
             <div style={st({ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 7 })}>
@@ -182,7 +215,7 @@ export function HomeView() {
                       key={doc.id}
                       doc={doc}
                       color={DOC_COLORS[doc.type] || 'var(--t2)'}
-                      onClick={() => { if (project) setActiveProjectId(project.id); setView('document') }}
+                      onClick={() => { if (project) setActiveProjectId(project.id); openDocSurface() }}
                     />
                   )
                 })}
@@ -302,6 +335,41 @@ function BigStat({ n, label, color = 'var(--t1)' }: { n: number | string; label:
       <div className="bri" style={st({ fontSize: 24, fontWeight: 800, letterSpacing: '-0.06em', color, lineHeight: 1 })}>{n}</div>
       <div style={st({ fontSize: 10, color: 'var(--t3)', marginTop: 2 })}>{label}</div>
     </div>
+  )
+}
+
+/* Live document row — real generated BRD/downstream doc with a completeness
+   signal. Mirrors DocRow's aesthetic but is driven by the live chain, not mock
+   data, and shows whether the spec is complete or what's still blocking it. */
+function LiveDocRow({ doc, onClick }: { doc: BRD; onClick: () => void }) {
+  const [hov, setHov] = useState(false)
+  const openConflicts = doc.conflicts.filter(c => !c.resolved).length
+  const untraced = doc.requirements.filter(r => !r.sourceQuote || !r.sourceQuote.trim()).length
+  const status = doc.complete
+    ? { label: 'Complete', color: 'var(--ok)' }
+    : openConflicts > 0
+      ? { label: `${openConflicts} conflict${openConflicts > 1 ? 's' : ''}`, color: 'var(--err)' }
+      : untraced > 0
+        ? { label: `${untraced} untraced`, color: 'var(--warn)' }
+        : { label: 'In progress', color: 'var(--warn)' }
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={st({
+        display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0',
+        width: '100%', background: 'transparent', border: 'none',
+        borderBottom: '1px solid var(--bd)', cursor: 'pointer',
+        fontFamily: 'inherit', textAlign: 'left',
+      })}
+    >
+      <span style={st({ width: 7, height: 7, borderRadius: '50%', background: status.color, flexShrink: 0, boxShadow: `0 0 0 3px color-mix(in srgb, ${status.color} 18%, transparent)` })} />
+      <span style={st({ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 500, color: hov ? 'var(--ac)' : 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', transition: 'color 120ms' })}>{doc.title}</span>
+      <span style={st({ fontSize: 11, fontWeight: 600, color: status.color, whiteSpace: 'nowrap' })}>{status.label}</span>
+      <DocTag type={doc.type ?? 'brd'} size="xs" />
+      <Ico n="arrow-r" s={12} c={hov ? 'var(--ac)' : 'var(--t3)'} />
+    </button>
   )
 }
 

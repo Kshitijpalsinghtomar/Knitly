@@ -99,11 +99,18 @@ function DocRow({ doc, onClick }: { doc: typeof DOCUMENTS[0]; onClick: () => voi
 }
 
 export function WorkspaceView() {
-  const { setView, activeProjectId, setGenOpen } = useApp()
+  const { setView, activeProjectId, setGenOpen, liveBRD, setActiveDocId } = useApp()
   const proj = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
   const allDocs = DOCUMENTS.filter(d => d.pid === proj.id)
   const [filter, setFilter] = useState<'all' | DocType>('all')
   const filtered = filter === 'all' ? allDocs : allDocs.filter(d => d.type === filter)
+
+  // Sample rows have no live counterpart — open the real live chain when it
+  // exists, otherwise send the user to the generator instead of an empty viewer.
+  const openDocSurface = () => {
+    if (liveBRD) { setActiveDocId(liveBRD.id); setView('document') }
+    else setGenOpen(true)
+  }
 
   const tabs = (['all', 'brd', 'prd', 'spec', 'stories', 'roadmap', 'research'] as ('all' | DocType)[])
     .map(t => ({
@@ -206,7 +213,7 @@ export function WorkspaceView() {
               <div style={st({ padding: '0 18px 0 0', textAlign: 'right', fontSize: 10.5, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.05em', textTransform: 'uppercase' })}>Modified</div>
             </div>
             {filtered.map(doc => (
-              <DocRow key={doc.id} doc={doc} onClick={() => setView('document')} />
+              <DocRow key={doc.id} doc={doc} onClick={openDocSurface} />
             ))}
           </div>
         )}

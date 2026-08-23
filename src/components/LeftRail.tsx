@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { PROJECTS, NOTIFICATIONS_DATA } from '../data'
+import { PROJECTS } from '../data'
 import { Ico } from './ui/Icon'
 import { Avatar } from './ui/Avatar'
 import { st } from '../lib/utils'
-import type { View, IcoName } from '../types'
-
-const PROJECT_VIEWS: View[] = ['workspace', 'integrations', 'graph', 'conflicts', 'traceability', 'requirement']
+import type { IcoName } from '../types'
 
 function RailBtn({ icon, label, active, onClick, badge }: {
   icon: IcoName; label: string; active: boolean; onClick: () => void; badge?: number
@@ -111,9 +109,6 @@ function ProjectPicker() {
 export function LeftRail() {
   const { view, setView, activeProjectId } = useApp()
   const activeProject = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
-  const unreadCount = NOTIFICATIONS_DATA.filter(n => !n.read).length
-
-  const inProjectView = PROJECT_VIEWS.includes(view)
 
   return (
     <div style={st({
@@ -148,7 +143,7 @@ export function LeftRail() {
 
       {/* Project section */}
       <ProjectPicker />
-      <RailBtn icon="overview" label="Project docs"  active={view === 'workspace'}    onClick={() => { setView('workspace') }} />
+      <RailBtn icon="overview" label="Project docs"  active={view === 'workspace' || view === 'document'}    onClick={() => { setView('workspace') }} />
       <RailBtn icon="plug"     label="Integrations"  active={view === 'integrations'} onClick={() => setView('integrations')} />
       <RailBtn icon="network"  label="Graph"         active={view === 'graph'}        onClick={() => setView('graph')} />
       <RailBtn icon="warning"  label="Conflicts"     active={view === 'conflicts'}    onClick={() => setView('conflicts')} badge={activeProject.conflicts} />
