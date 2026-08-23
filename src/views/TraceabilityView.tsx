@@ -100,6 +100,10 @@ export function TraceabilityView() {
   const { activeProjectId, setView, setActiveReqId } = useApp()
   const [filter, setFilter] = useState<Filter>('all')
   const proj = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
+  // Linking an undocumented PR back to a requirement has no backend flow yet —
+  // give honest feedback instead of a dead click.
+  const [notice, setNotice] = useState<string | null>(null)
+  const soon = (what: string) => { setNotice(what); setTimeout(() => setNotice(null), 2600) }
 
   const reqs = REQUIREMENTS_DETAIL.filter(r => r.pid === activeProjectId)
   const contradicted = reqs.filter(r => r.status === 'contradicted')
@@ -232,7 +236,7 @@ export function TraceabilityView() {
                 title={p.title}
                 authorId={p.authorId}
                 mergedAt={p.mergedAt}
-                onClick={() => {}}
+                onClick={() => soon('Linking an undocumented PR to a requirement is coming soon.')}
               />
             ))}
           </div>
@@ -290,6 +294,13 @@ export function TraceabilityView() {
           </div>
         )}
       </div>
+
+      {notice && (
+        <div style={st({ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 200, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', background: 'var(--sf2)', border: '1px solid var(--bd2)', borderRadius: 10, boxShadow: 'var(--sh2)', maxWidth: 440 })}>
+          <Ico n="link" s={14} c="var(--ac)" />
+          <span style={st({ fontSize: 13, color: 'var(--t1)', fontWeight: 500 })}>{notice}</span>
+        </div>
+      )}
     </div>
   )
 }

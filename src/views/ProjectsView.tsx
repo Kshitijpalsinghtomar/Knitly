@@ -98,7 +98,7 @@ function Stat({ n, label, color = 'var(--t1)' }: { n: number; label: string; col
 }
 
 export function ProjectsView() {
-  const { setView, setActiveProjectId } = useApp()
+  const { setView, setActiveProjectId, setGenOpen } = useApp()
   const [newHov, setNewHov] = useState(false)
   const totalReqs = PROJECTS.reduce((s, p) => s + p.reqs, 0)
   const totalConflicts = PROJECTS.reduce((s, p) => s + p.conflicts, 0)
@@ -121,7 +121,7 @@ export function ProjectsView() {
               )}
             </p>
           </div>
-          <Btn v="primary"><Ico n="plus" s={14} c="#0F0F0E" /> New project</Btn>
+          <Btn v="primary" onClick={() => setGenOpen(true)}><Ico n="plus" s={14} c="#0F0F0E" /> New project</Btn>
         </div>
       </div>
 
@@ -141,6 +141,7 @@ export function ProjectsView() {
 
         {/* New project — text link style, no dashed rectangle */}
         <button
+          onClick={() => setGenOpen(true)}
           onMouseEnter={() => setNewHov(true)}
           onMouseLeave={() => setNewHov(false)}
           style={st({

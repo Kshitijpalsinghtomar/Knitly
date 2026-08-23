@@ -1,5 +1,6 @@
 import type { BRD, ServerStatus, Source } from '../types'
 import type { DocumentTypeGate, DocumentTypeId, DocumentTypeMeta } from './documentTypes'
+import type { IntegrationAccount, IntegrationId, IntegrationSignal } from './integrationTypes'
 
 /**
  * Thin client for the Ariadne backend served alongside the Knitly frontend.
@@ -29,6 +30,19 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error((err as { error?: string }).error || res.statusText)
+  }
+  return res.json() as Promise<T>
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: 'no-store' })
   if (!res.ok) {
@@ -48,7 +62,15 @@ export async function getHealth(): Promise<ServerStatus> {
     const res = await fetch('/api/health', { cache: 'no-store' })
     if (!res.ok) return OFFLINE
     const data = (await res.json()) as ServerStatus
-    return { ok: true, dbConfigured: data.dbConfigured, mode: data.mode, detail: data.detail }
+    return {
+      ok: true,
+      dbConfigured: data.dbConfigured,
+      mode: data.mode,
+      detail: data.detail,
+      db: data.db,
+      generator: data.generator,
+      documentGenerator: data.documentGenerator,
+    }
   } catch {
     return OFFLINE
   }
@@ -114,11 +136,12 @@ export async function getBRD(id: string): Promise<BRD> {
 
 /**
  * Persist a conflict resolution for a BRD. Returns the updated BRD (with its
- * `complete` flag recomputed) so the UI reflects the durable state.
+ * `complete` flag recomputed) so the UI reflects the durable state. Uses PATCH
+ * to match the server route (`PATCH /api/brds/:id/conflicts/:conflictId`).
  */
 export async function resolveConflict(brdId: string, conflictId: string, resolved: boolean): Promise<BRD> {
   try {
-    const data = await post<{ brd: BRD }>(`/api/brds/${encodeURIComponent(brdId)}/conflicts/${encodeURIComponent(conflictId)}`, { resolved })
+    const data = await patch<{ brd: BRD }>(`/api/brds/${encodeURIComponent(brdId)}/conflicts/${encodeURIComponent(conflictId)}`, { resolved })
     return data.brd
   } catch {
     throw new Error('Conflict resolution failed — is the Ariadne server running? (pnpm start)')
@@ -196,4 +219,50 @@ export async function fetchDocumentTypes(params: { parentDocumentId?: string; so
   const qs = q.toString()
   const data = await get<DocumentTypesResponse>(`/api/document-types${qs ? `?${qs}` : ''}`)
   return data
+}
+
+// ─── Integrations: connect + browse signals + ingest ─────────────────────────
+export interface IntegrationsResponse {
+  integrations: IntegrationAccount[]
+  provider?: string
+  status: ServerStatus
+}
+
+/**
+ * List every integration with its live connection state. Degrades to an empty
+ * list + offline status when the backend is unreachable (the screen shows an
+ * honest "backend offline" state rather than crashing).
+ */
+export async function listIntegrations(): Promise<IntegrationsResponse> {
+  try {
+    const data = await get<{ integrations: IntegrationAccount[]; provider?: string; mode: ServerStatus['mode']; dbConfigured: boolean; detail?: string }>('/api/integrations')
+    return { integrations: data.integrations, provider: data.provider, status: { ok: true, dbConfigured: data.dbConfigured, mode: data.mode, detail: data.detail } }
+  } catch {
+    return { integrations: [], status: OFFLINE }
+  }
+}
+
+/** Connect or disconnect an integration. Returns the updated account. */
+export async function setIntegrationConnected(id: IntegrationId, connect: boolean): Promise<IntegrationAccount> {
+  const data = await post<{ integration: IntegrationAccount }>(`/api/integrations/${encodeURIComponent(id)}/${connect ? 'connect' : 'disconnect'}`, {})
+  return data.integration
+}
+
+/** List the signals available from one connected integration. */
+export async function listSignals(id: IntegrationId): Promise<IntegrationSignal[]> {
+  try {
+    const data = await get<{ signals: IntegrationSignal[] }>(`/api/integrations/${encodeURIComponent(id)}/signals`)
+    return data.signals
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Pull chosen signals into a persisted Source (the generate journey then builds
+ * a BRD from `source.id`). Throws with the server's message on failure.
+ */
+export async function ingestSignals(input: { signalIds: string[]; title?: string; author?: string }): Promise<{ source: Source; signalCount: number; status: ServerStatus }> {
+  const data = await post<{ source: Source; signalCount: number; mode: ServerStatus['mode']; dbConfigured: boolean; detail?: string }>('/api/integrations/ingest', input)
+  return { source: data.source, signalCount: data.signalCount, status: { ok: true, dbConfigured: data.dbConfigured, mode: data.mode, detail: data.detail } }
 }

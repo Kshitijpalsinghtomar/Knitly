@@ -162,7 +162,13 @@ export interface GeneratedRequirement {
   id: string
   /** The requirement statement. */
   text: string
-  /** Exact quote from the source that this requirement traces back to. */
+  /**
+   * The provenance quote this item traces back to. For a BRD requirement this
+   * is a VERBATIM quote from the ingested source. For a downstream document
+   * (PRD/spec/stories/…) it is the text of the parent BRD requirement it derives
+   * from — provenance one level up the chain. Empty only when the trace could
+   * not be verified (→ status `unlinked`, making the document incomplete).
+   */
   sourceQuote: string
   /** Inferred author of the quote. */
   author: string
@@ -171,6 +177,30 @@ export interface GeneratedRequirement {
   status: 'in-sync' | 'stale' | 'contradicted' | 'unlinked'
   /** Conflicts that reference this requirement. */
   conflicts: SourceConflict[]
+  /**
+   * Parent requirement ids this item derives from (downstream docs only). A
+   * BRD requirement traces to a source quote and leaves this empty; a PRD/spec/
+   * story item traces UP to one or more BRD requirement ids. This is the
+   * structured half of downstream provenance (the human-readable half is
+   * `sourceQuote`).
+   */
+  derivedFrom?: string[]
+  /**
+   * Optional type-specific elaboration rendered under the item — e.g. Gherkin
+   * acceptance criteria for a user story, the EARS pattern for a spec line, or
+   * the roadmap phase for a milestone. Never affects completeness.
+   */
+  detail?: string
+  /**
+   * The framework section this item belongs to, as a key from
+   * `DOCUMENT_SECTIONS[docType]` (src/lib/documentTypes.ts) — e.g. a BRD
+   * requirement is classified into `functional` / `nonfunctional` / `objectives`
+   * / … so the viewer can render a real, sectioned document instead of a flat
+   * list. Assigned by `enrichGeneratedDoc` at generation time; the viewer falls
+   * back to a client-side classifier when absent (older/AI docs). Never affects
+   * completeness.
+   */
+  section?: string
 }
 
 /** A candidate conflict detected between two requirements. */
@@ -200,6 +230,19 @@ export interface BRD {
   type?: DocType
   /** The user's requested brief captured at generation time (optional). */
   brief?: string
+  /**
+   * A short narrative "read" of the document — Trace's plain-language summary of
+   * what was generated (how many requirements, the shape of the split, and
+   * whether it is complete). Rendered as the "Trace's read" lede in the viewer.
+   * Assigned by `enrichGeneratedDoc`; the viewer computes a fallback when absent.
+   */
+  summary?: string
+  /**
+   * For a downstream document (PRD/spec/…), the id of the parent BRD it was
+   * generated from. Empty for a BRD. Lets the client walk the provenance chain
+   * one level up (this doc → parent BRD → original source).
+   */
+  parentId?: string
 }
 
 /**
@@ -222,4 +265,10 @@ export interface ServerStatus {
   detail?: string
   /** Present only in db mode; describes real schema/connectivity state (never leaks the URL). */
   db?: DbHealth
+  /** Active BRD generator label (e.g. 'rule-based' or 'claude:…'). Never leaks the key. */
+  generator?: string
+  /** Active downstream document generator label. Never leaks the key. */
+  documentGenerator?: string
+  /** Active integration provider label (e.g. 'demo …' or 'composio'). Never leaks the key. */
+  integrations?: string
 }

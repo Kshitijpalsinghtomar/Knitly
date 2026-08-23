@@ -7,11 +7,14 @@
  *  1. Registry exposes all six supported types preserving naming conventions.
  *  2. BRD is the only initially-eligible type and is allowed with valid sources.
  *  3. Every downstream type (PRD, Tech Spec, User Stories, Roadmap, Research)
- *     is LOCKED — even with a complete BRD parent — until its adapter exists,
- *     with an exact, honest reason. Never falls back to the BRD generator.
+ *     is LOCKED until a COMPLETE BRD parent is supplied, then GENERATES a
+ *     fully-traced document whose every item derives from a parent requirement.
+ *     A locked type returns an exact, honest reason and never falls back to the
+ *     BRD generator or any other type.
  *  4. Unknown type ids are rejected (type mismatch never produces a BRD).
  *  5. Real HTTP endpoint behavior (direct API calls cannot bypass the gate):
- *       - POST /api/documents/generate with a downstream type → 409 + gate
+ *       - POST /api/documents/generate, downstream type, no parent → 409 + gate
+ *       - downstream type with a complete parent → 200, a traced document
  *       - unknown type → 422
  *       - BRD with no source → 422
  *       - BRD with a valid source → 200, returns a BRD with type/brief recorded
@@ -33,11 +36,13 @@ describe('document-type registry', () => {
     expect(PROVISIONAL_DOWNSTREAM_ORDER[0]).toBe('brd')
   })
 
-  test('registry marks BRD implemented and initial; downstream types are not implemented', () => {
+  test('registry marks BRD implemented and initial; downstream types implemented but not initial', () => {
     expect(DOCUMENT_TYPES.brd.implemented).toBe(true)
     expect(DOCUMENT_TYPES.brd.isInitial).toBe(true)
     for (const id of ['prd', 'spec', 'stories', 'roadmap', 'research'] as const) {
-      expect(DOCUMENT_TYPES[id].implemented).toBe(false)
+      // Adapters now exist for every downstream type; the binding gate is the
+      // COMPLETE-parent requirement, not adapter existence.
+      expect(DOCUMENT_TYPES[id].implemented).toBe(true)
       expect(DOCUMENT_TYPES[id].isInitial).toBe(false)
     }
   })
@@ -67,22 +72,21 @@ describe('gate evaluation (server-side enforcement)', () => {
     expect(gate.checks.find((c) => c.key === 'sources-present')!.ok).toBe(false)
   })
 
-  test('every downstream type is locked with an exact honest reason', () => {
+  test('every downstream type is locked without a parent and allowed with a complete one', () => {
     for (const id of ['prd', 'spec', 'stories', 'roadmap', 'research'] as const) {
-      // No parent at all.
+      // No parent at all → locked, honestly citing the missing complete parent.
       const noParent = evaluateGate({ type: id, hasSources: false })
       expect(noParent.allowed).toBe(false)
       expect(noParent.eligible).toBe(false)
-      expect(noParent.reason).toContain('not implemented yet')
       expect(noParent.reason).toContain('parent')
+      expect(noParent.reason).toContain('complete')
+      expect(noParent.checks.find((c) => c.key === 'parent-required')!.ok).toBe(false)
 
-      // A complete parent is still NOT enough — the adapter does not exist yet.
+      // A complete parent is now sufficient — the adapter exists.
       const completeParent = evaluateGate({ type: id, hasSources: false, parent: { id: 'brd-1', complete: true } })
-      expect(completeParent.allowed).toBe(false)
+      expect(completeParent.allowed).toBe(true)
       expect(completeParent.eligible).toBe(true)
-      expect(completeParent.reason).toContain('not implemented yet')
-      // adapter-implemented check must be the reason that keeps it locked.
-      expect(completeParent.checks.find((c) => c.key === 'adapter-implemented')!.ok).toBe(false)
+      expect(completeParent.checks.find((c) => c.key === 'adapter-implemented')!.ok).toBe(true)
       expect(completeParent.checks.find((c) => c.key === 'parent-complete')!.ok).toBe(true)
     }
   })
@@ -94,11 +98,12 @@ describe('gate evaluation (server-side enforcement)', () => {
     expect(gate.reason).toContain('not complete')
   })
 
-  test('a downstream type never yields an allowed/blank result (no BRD fallback)', () => {
+  test('a downstream type with a complete parent is allowed but never coerced to BRD', () => {
     for (const id of ['prd', 'spec', 'stories', 'roadmap', 'research'] as const) {
       const gate = evaluateGate({ type: id, hasSources: true, parent: { id: 'brd-1', complete: true } })
-      expect(gate.allowed).toBe(false)
-      expect((DOCUMENT_TYPES[id].id) === 'brd').toBe(false)
+      expect(gate.allowed).toBe(true)
+      // The requested type is preserved end to end — no silent BRD fallback.
+      expect(DOCUMENT_TYPES[id].id === 'brd').toBe(false)
       expect(gate.type).toBe(id)
     }
   })
@@ -113,14 +118,20 @@ beforeAll(async () => {
   // the HTTP path (route guards, status codes, gate payloads) is exercised.
   const prevPort = process.env.PORT
   const prevDb = process.env.DATABASE_URL
+  // Force the deterministic generator so these gate tests never make a live API
+  // call (hermetic + offline) regardless of the ambient environment.
+  const prevKey = process.env.ANTHROPIC_API_KEY
   process.env.PORT = String(TEST_PORT)
   delete process.env.DATABASE_URL
+  delete process.env.ANTHROPIC_API_KEY
   const mod = await import('./index')
   ;(globalThis as Record<string, unknown>)[TEST_SERVER_KEY] = mod
   if (prevPort === undefined) delete process.env.PORT
   else process.env.PORT = prevPort
   if (prevDb === undefined) delete process.env.DATABASE_URL
   else process.env.DATABASE_URL = prevDb
+  if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY
+  else process.env.ANTHROPIC_API_KEY = prevKey
 })
 afterAll(() => {
   // Stop the in-process test server so the test process can exit cleanly.
@@ -185,7 +196,7 @@ describe('HTTP /api/documents/generate (direct bypass rejected)', () => {
     expect(((await res.json()) as { code?: string }).code).toBe('MISSING_SOURCE')
   })
 
-  test('PRD requested directly is locked with 409 + inspectable gate, returns no BRD', async () => {
+  test('PRD requested directly with no parent is locked with 409 + inspectable gate, returns no BRD', async () => {
     // Direct API call with no parent at all — must be locked, never a BRD.
     const res = await fetch(`${BASE}/api/documents/generate`, {
       method: 'POST',
@@ -196,11 +207,13 @@ describe('HTTP /api/documents/generate (direct bypass rejected)', () => {
     const data = (await res.json()) as { code?: string; gate?: DocumentTypeGate; brd?: unknown }
     expect(data.code).toBe('DOCUMENT_LOCKED')
     expect(data.gate?.allowed).toBe(false)
-    expect(data.gate?.checks.find((c) => c.key === 'adapter-implemented')?.ok).toBe(false)
+    // The adapter now exists; the binding failure is the missing complete parent.
+    expect(data.gate?.checks.find((c) => c.key === 'adapter-implemented')?.ok).toBe(true)
+    expect(data.gate?.checks.find((c) => c.key === 'parent-required')?.ok).toBe(false)
     expect('brd' in data).toBe(false)
   })
 
-  test('every downstream type is locked over HTTP even with a complete BRD parent', async () => {
+  test('every downstream type GENERATES a traced, persisted document from a complete BRD parent', async () => {
     const { id } = await makeBrd()
     for (const type of ['prd', 'spec', 'stories', 'roadmap', 'research'] as const) {
       const res = await fetch(`${BASE}/api/documents/generate`, {
@@ -208,12 +221,62 @@ describe('HTTP /api/documents/generate (direct bypass rejected)', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ type, parentDocumentId: id, brief: `want a ${type}` }),
       })
-      expect(res.status).toBe(409)
-      const data = (await res.json()) as { gate?: DocumentTypeGate; brd?: unknown }
-      expect(data.gate?.checks.find((c) => c.key === 'parent-complete')?.ok).toBe(true)
-      expect(data.gate?.checks.find((c) => c.key === 'adapter-implemented')?.ok).toBe(false)
-      expect('brd' in data).toBe(false)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        brd: { id: string; type?: string; parentId?: string; complete: boolean; requirements: { derivedFrom?: string[]; sourceQuote: string }[] }
+      }
+      // The requested type is produced (never coerced to BRD) and links to its parent.
+      expect(data.brd.type).toBe(type)
+      expect(data.brd.parentId).toBe(id)
+      expect(data.brd.requirements.length).toBeGreaterThan(0)
+      // Provenance one level up: every item derives from a real parent requirement.
+      for (const item of data.brd.requirements) {
+        expect(item.derivedFrom && item.derivedFrom.length > 0).toBe(true)
+        expect(item.derivedFrom![0]).toMatch(/^REQ-\d+$/)
+        expect(item.sourceQuote.length).toBeGreaterThan(0)
+      }
+      expect(data.brd.complete).toBe(true)
+
+      // The generated document is durably persisted and reloadable by id.
+      const reload = await fetch(`${BASE}/api/brds/${data.brd.id}`)
+      expect(reload.status).toBe(200)
+      const reloaded = (await reload.json()) as { brd: { type?: string; parentId?: string } }
+      expect(reloaded.brd.type).toBe(type)
+      expect(reloaded.brd.parentId).toBe(id)
     }
+  })
+
+  test('a downstream type with an incomplete parent is locked with 409 (never generated)', async () => {
+    // Build a BRD with an unresolved conflict (two contradicting requirements)
+    // ⇒ genuinely incomplete parent, so downstream generation must stay locked.
+    const genRes = await fetch(`${BASE}/api/documents/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'brd',
+        source: {
+          id: 'src-incomplete',
+          title: 'Conflicted',
+          rawText: 'Alex: We must always allow one-click purchase for returning customers.\nJordan: We must never allow one-click purchase for returning customers.',
+          author: 'Alex',
+          created_at: new Date().toISOString(),
+        },
+      }),
+    })
+    expect(genRes.status).toBe(200)
+    const parent = (await genRes.json()) as { brd: { id: string; complete: boolean; conflicts: unknown[] } }
+    expect(parent.brd.conflicts.length).toBeGreaterThan(0)
+    expect(parent.brd.complete).toBe(false)
+    const res = await fetch(`${BASE}/api/documents/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'prd', parentDocumentId: parent.brd.id }),
+    })
+    expect(res.status).toBe(409)
+    const data = (await res.json()) as { code?: string; gate?: DocumentTypeGate; brd?: unknown }
+    expect(data.code).toBe('DOCUMENT_LOCKED')
+    expect(data.gate?.checks.find((c) => c.key === 'parent-complete')?.ok).toBe(false)
+    expect('brd' in data).toBe(false)
   })
 
   test('downstream with a missing parent returns 422 PARENT_NOT_FOUND', async () => {
@@ -235,14 +298,13 @@ describe('HTTP /api/document-types (registry + gate state)', () => {
     expect(data.types.map((t) => t.id)).toEqual([...DOCUMENT_TYPE_IDS])
     const brdType = data.types.find((t) => t.id === 'brd')!
     expect(brdType.gate.allowed).toBe(true)
-    // With a complete parent supplied (and sources present), downstream types
-    // still report locked while BRD reports allowed.
+    // With a complete parent supplied (and sources present), every downstream
+    // type now reports allowed alongside BRD — all adapters exist.
     const { id } = await makeBrd()
     const res2 = await fetch(`${BASE}/api/document-types?parentDocumentId=${id}&sourceCount=1`)
     const data2 = (await res2.json()) as { types: { id: string; gate: DocumentTypeGate }[] }
     for (const t of data2.types) {
-      if (t.id === 'brd') expect(t.gate.allowed).toBe(true)
-      else expect(t.gate.allowed).toBe(false)
+      expect(t.gate.allowed).toBe(true)
     }
     expect(data.provisionalDownstreamOrder).toEqual([...PROVISIONAL_DOWNSTREAM_ORDER])
   })

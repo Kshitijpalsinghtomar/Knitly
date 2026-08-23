@@ -3,7 +3,8 @@ import { REQUIREMENTS_DETAIL, TEAM_DATA, PROJECTS, DOCUMENTS } from '../data'
 import { Ico } from '../components/ui/Icon'
 import { Btn } from '../components/ui/Button'
 import { st } from '../lib/utils'
-import type { GeneratedRequirement } from '../types'
+import { downloadMarkdown } from '../lib/exportDoc'
+import type { BRD, GeneratedRequirement } from '../types'
 
 const STATUS_CONFIG = {
   'in-sync':     { label: 'In sync',     color: 'var(--ok)',   bg: 'rgba(78,173,121,0.12)' },
@@ -186,6 +187,32 @@ export function RequirementView() {
     setView('document')
   }
 
+  // Export this (sample) requirement as a portable, provenance-carrying Markdown
+  // doc — wrapped as a one-requirement BRD so the same serializer/format applies.
+  const exportReq = () => {
+    const wrap: BRD = {
+      id: req.id,
+      sourceId: req.docId,
+      title: req.title,
+      author: sourceAuthor?.name ?? 'Unknown',
+      createdAt: new Date().toISOString(),
+      requirements: [{
+        id: req.id,
+        text: req.title,
+        sourceQuote: req.source.quote,
+        author: sourceAuthor?.name ?? '',
+        timestamp: req.source.origin.date,
+        status: req.status,
+        conflicts: [],
+        detail: req.decision,
+      }],
+      conflicts: [],
+      complete: true,
+      type: 'brd',
+    }
+    downloadMarkdown(wrap, { sourceTitle: doc?.title })
+  }
+
   return (
     <div style={st({ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' })}>
 
@@ -231,7 +258,7 @@ export function RequirementView() {
           <Btn v="ghost" onClick={() => setView('traceability')}>
             <Ico n="shield" s={13} c="var(--t2)" /> Traceability board
           </Btn>
-          <Btn v="ghost" onClick={() => {}}>
+          <Btn v="ghost" onClick={exportReq}>
             <Ico n="download" s={13} c="var(--t2)" /> Export
           </Btn>
         </div>

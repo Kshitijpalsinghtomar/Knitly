@@ -9,9 +9,13 @@ import { Trace } from '../components/Trace'
 import { st } from '../lib/utils'
 
 export function KnowledgeView() {
-  const { setView } = useApp()
+  const { setGenOpen } = useApp()
   const [tab, setTab] = useState<'templates' | 'shared' | 'glossary' | 'proposed'>('templates')
   const [proposed, setProposed] = useState(KB_PROPOSED)
+  const [notice, setNotice] = useState<string | null>(null)
+  // Library curation (propose/add/glossary) isn't wired to a backend yet — give
+  // honest feedback instead of a dead click. "Use template" opens the generator.
+  const soon = (what: string) => { setNotice(what); setTimeout(() => setNotice(null), 2600) }
 
   const platformTemplates = KB_TEMPLATES.filter(t => t.platform)
   const workspaceTemplates = KB_TEMPLATES.filter(t => !t.platform)
@@ -34,7 +38,7 @@ export function KnowledgeView() {
               Shared templates, reusable requirements, and company standards.
             </p>
           </div>
-          <Btn v="primary"><Ico n="plus" s={14} c="#0F0F0E" /> Add to library</Btn>
+          <Btn v="primary" onClick={() => soon('Library curation is coming soon.')}><Ico n="plus" s={14} c="#0F0F0E" /> Add to library</Btn>
         </div>
 
         <div style={st({ display: 'flex', gap: 0 })}>
@@ -82,7 +86,7 @@ export function KnowledgeView() {
               const fm = DOC_META[featured.type]
               return (
                 <div
-                  onClick={() => setView('document')}
+                  onClick={() => setGenOpen(true)}
                   style={st({
                     display: 'flex', alignItems: 'center', gap: 20,
                     padding: '22px 52px',
@@ -114,7 +118,7 @@ export function KnowledgeView() {
                       <div className="mono" style={st({ fontSize: 22, fontWeight: 700, color: 'var(--t1)', lineHeight: 1 })}>{featured.uses}×</div>
                       <div style={st({ fontSize: 10, color: 'var(--t3)', marginTop: 2 })}>used</div>
                     </div>
-                    <Btn v="primary" onClick={() => setView('document')}>Use template</Btn>
+                    <Btn v="primary" onClick={() => setGenOpen(true)}>Use template</Btn>
                   </div>
                 </div>
               )
@@ -124,7 +128,7 @@ export function KnowledgeView() {
             {restPlatform.map((tmpl, i) => {
               const m = DOC_META[tmpl.type]
               return (
-                <TemplateRow key={tmpl.id} tmpl={tmpl} m={m} onUse={() => setView('document')} isLast={i === restPlatform.length - 1} />
+                <TemplateRow key={tmpl.id} tmpl={tmpl} m={m} onUse={() => setGenOpen(true)} isLast={i === restPlatform.length - 1} />
               )
             })}
 
@@ -135,7 +139,7 @@ export function KnowledgeView() {
                   <span style={st({ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase' })}>Acme Corp templates</span>
                   <span style={st({ fontSize: 10, fontWeight: 700, color: 'var(--ok)', background: 'rgba(78,173,121,0.12)', padding: '2px 8px', borderRadius: 100 })}>Private</span>
                 </div>
-                <Btn v="ghost" sm><Ico n="plus" s={12} c="var(--t2)" /> Propose template</Btn>
+                <Btn v="ghost" sm onClick={() => soon('Proposing a workspace template is coming soon.')}><Ico n="plus" s={12} c="var(--t2)" /> Propose template</Btn>
               </div>
             </div>
 
@@ -143,7 +147,7 @@ export function KnowledgeView() {
               workspaceTemplates.map((tmpl, i) => {
                 const m = DOC_META[tmpl.type]
                 return (
-                  <TemplateRow key={tmpl.id} tmpl={tmpl} m={m} onUse={() => setView('document')} isLast={i === workspaceTemplates.length - 1} />
+                  <TemplateRow key={tmpl.id} tmpl={tmpl} m={m} onUse={() => setGenOpen(true)} isLast={i === workspaceTemplates.length - 1} />
                 )
               })
             ) : (
@@ -151,7 +155,7 @@ export function KnowledgeView() {
                 <div style={st({ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '52px', borderTop: '1px solid var(--bd)', textAlign: 'center' })}>
                   <Trace size={48} mood="thinking" />
                   <p style={st({ fontSize: 14, color: 'var(--t2)', margin: '16px 0 18px' })}>No workspace templates yet.<br />Propose the first one to set a standard.</p>
-                  <Btn v="ghost" sm><Ico n="plus" s={12} c="var(--t2)" /> Propose first template</Btn>
+                  <Btn v="ghost" sm onClick={() => soon('Proposing a workspace template is coming soon.')}><Ico n="plus" s={12} c="var(--t2)" /> Propose first template</Btn>
                 </div>
               </div>
             )}
@@ -166,7 +170,7 @@ export function KnowledgeView() {
               <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: 0, lineHeight: 1.7, maxWidth: 480 })}>
                 Requirements shared across multiple projects. Refer to these instead of rewriting — any change here propagates everywhere they're used.
               </p>
-              <Btn v="ghost" sm><Ico n="plus" s={12} c="var(--t2)" /> Propose requirement</Btn>
+              <Btn v="ghost" sm onClick={() => soon('Proposing a shared requirement is coming soon.')}><Ico n="plus" s={12} c="var(--t2)" /> Propose requirement</Btn>
             </div>
 
             <div style={st({ borderTop: '1px solid var(--bd)' })}>
@@ -183,7 +187,7 @@ export function KnowledgeView() {
                   <span className="mono" style={st({ fontSize: 11, color: 'var(--ac)', fontWeight: 700, flexShrink: 0, minWidth: 72 })}>{req.code}</span>
                   <span style={st({ fontSize: 14, color: 'var(--t1)', flex: 1, fontWeight: 500 })}>{req.title}</span>
                   <span style={st({ fontSize: 12, color: 'var(--t3)', flexShrink: 0 })}>{req.used} projects</span>
-                  <Btn v="ghost" sm>Add to doc</Btn>
+                  <Btn v="ghost" sm onClick={() => soon('Adding a shared requirement to a document is coming soon.')}>Add to doc</Btn>
                 </div>
               ))}
             </div>
@@ -197,7 +201,7 @@ export function KnowledgeView() {
             <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 22px', maxWidth: 360, lineHeight: 1.7 })}>
               Add company-specific terms so Trace understands your context when generating documents. One term defined here beats a paragraph of clarification in every prompt.
             </p>
-            <Btn v="primary"><Ico n="plus" s={14} c="#0F0F0E" /> Add first term</Btn>
+            <Btn v="primary" onClick={() => soon('Glossary terms are coming soon.')}><Ico n="plus" s={14} c="#0F0F0E" /> Add first term</Btn>
           </div>
         )}
 
@@ -253,6 +257,13 @@ export function KnowledgeView() {
           </div>
         )}
       </div>
+
+      {notice && (
+        <div style={st({ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 200, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', background: 'var(--sf2)', border: '1px solid var(--bd2)', borderRadius: 10, boxShadow: 'var(--sh2)', maxWidth: 440 })}>
+          <Trace size={20} mood="thinking" />
+          <span style={st({ fontSize: 13, color: 'var(--t1)', fontWeight: 500 })}>{notice}</span>
+        </div>
+      )}
     </div>
   )
 }

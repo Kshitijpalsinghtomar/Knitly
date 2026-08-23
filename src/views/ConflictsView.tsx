@@ -7,11 +7,18 @@ import { Trace } from '../components/Trace'
 import { st } from '../lib/utils'
 
 export function ConflictsView() {
-  const { activeProjectId, setView, setActiveReqId } = useApp()
+  const { activeProjectId, setView, setActiveReqId, setGenOpen, liveBRD, setActiveDocId } = useApp()
   const proj = PROJECTS.find(p => p.id === activeProjectId) || PROJECTS[0]
   const [resolved, setResolved] = useState(new Set<string>())
   const [expanded, setExpanded] = useState<string | null>(CONFLICTS_DATA[0]?.id || null)
   const left = CONFLICTS_DATA.length - resolved.size
+
+  // Sample conflicts have no live counterpart — open the real live chain root
+  // when it exists, otherwise send the user to the generator (never a stale/empty viewer).
+  const openDocSurface = () => {
+    if (liveBRD) { setActiveDocId(liveBRD.id); setView('document') }
+    else setGenOpen(true)
+  }
 
   const goToReq = (reqId: string) => {
     const hasDetail = REQUIREMENTS_DETAIL.some(r => r.id === reqId)
@@ -59,7 +66,7 @@ export function ConflictsView() {
             <Trace size={64} mood="done" />
             <p className="bri" style={st({ fontSize: 22, fontWeight: 800, color: 'var(--t1)', margin: '22px 0 8px', letterSpacing: '-0.03em' })}>Clean spec. Ship it.</p>
             <p style={st({ fontSize: 14, color: 'var(--t2)', margin: '0 0 24px' })}>No outstanding conflicts in {proj.name}.</p>
-            <Btn v="ghost" onClick={() => setView('document')}><Ico n="arrow-r" s={12} c="var(--t2)" /> Back to document</Btn>
+            <Btn v="ghost" onClick={openDocSurface}><Ico n="arrow-r" s={12} c="var(--t2)" /> Back to document</Btn>
           </div>
         ) : (
           <div>
@@ -96,15 +103,22 @@ export function ConflictsView() {
                   )}
 
                   {/* Row header — always visible */}
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={done ? -1 : 0}
                     onClick={() => !done && setExpanded(isExpanded ? null : c.id)}
+                    onKeyDown={e => {
+                      if (!done && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault()
+                        setExpanded(isExpanded ? null : c.id)
+                      }
+                    }}
                     style={st({
                       width: '100%', display: 'flex', alignItems: 'center', gap: 0,
                       padding: '18px 52px 18px 56px',
                       background: 'none', border: 'none', cursor: done ? 'default' : 'pointer',
                       fontFamily: 'inherit', textAlign: 'left',
                     })}
-
                   >
                     {/* Severity + IDs */}
                     <div style={st({ display: 'flex', alignItems: 'center', gap: 8, minWidth: 200, flexShrink: 0 })}>
@@ -143,7 +157,7 @@ export function ConflictsView() {
                           : <Ico n="chevron-d" s={12} c="var(--t3)" />
                       }
                     </div>
-                  </button>
+                  </div>
 
                   {/* Expanded detail */}
                   {isExpanded && (
@@ -166,7 +180,7 @@ export function ConflictsView() {
                         <Btn v="primary" onClick={() => { setResolved(new Set([...resolved, c.id])); setExpanded(null) }}>
                           <Ico n="check" s={12} c="#0F0F0E" /> Mark as resolved
                         </Btn>
-                        <Btn v="ghost" onClick={() => setView('document')}>
+                        <Btn v="ghost" onClick={openDocSurface}>
                           <Ico n="doc" s={12} c="var(--t2)" /> Open document
                         </Btn>
                         {(reqAHasDetail || reqBHasDetail) && (
