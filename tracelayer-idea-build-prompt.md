@@ -1,4 +1,4 @@
-# TraceLayer product/build agent — operating instructions
+# Knitly product/build agent — operating instructions
 
 Companion to the frontend design prompt. That one governs how UI gets built. This one governs how a *feature or idea* gets reasoned through before any code is written. The frontend is already built — this is for extending the product into its next version, not redesigning what exists.
 

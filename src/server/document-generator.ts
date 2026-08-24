@@ -172,7 +172,7 @@ function systemPromptFor(type: DownstreamTypeId): string {
     research: 'a Research plan — the open questions and assumptions to validate before build, each with a method',
   }
   return [
-    "You are TraceLayer's downstream document generator.",
+    "You are Knitly's downstream document generator.",
     `Produce ${kind[type]} DERIVED FROM a complete, already-approved Business Requirements Document (BRD).`,
     'RULES:',
     '- Every item you emit MUST derive from exactly one parent BRD requirement, cited by its id in `derivedFromReqId`.',

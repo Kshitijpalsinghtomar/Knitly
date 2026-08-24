@@ -14,11 +14,11 @@ const PROJECT_CRUMB_VIEWS: View[] = [
 ]
 
 const VIEW_LABEL: Partial<Record<View, string>> = {
-  document:     'Document',
-  graph:        'Graph',
-  conflicts:    'Conflicts',
+  document: 'Document',
+  graph: 'Graph',
+  conflicts: 'Conflicts',
   integrations: 'Integrations',
-  requirement:  'Requirement',
+  requirement: 'Requirement',
   traceability: 'Traceability',
 }
 
@@ -79,7 +79,7 @@ export function Topbar() {
           ))}
         </div>
       ) : (
-        <span className="bri" style={st({ fontSize: 14, fontWeight: 800, color: 'var(--t3)', letterSpacing: '-0.02em' })}>TraceLayer</span>
+        <span className="bri" style={st({ fontSize: 14, fontWeight: 800, color: 'var(--t3)', letterSpacing: '-0.02em' })}>Knitly</span>
       )}
 
       {/* Search */}

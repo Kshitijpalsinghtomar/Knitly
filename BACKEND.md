@@ -1,6 +1,6 @@
-# TraceLayer — Backend Specification
+# Knitly — Backend Specification
 
-This document covers everything the backend agent needs to implement to wire up the TraceLayer frontend. The frontend is a complete React + Vite app in `src/`. All data is currently mocked in `src/data/index.ts`. Replace mock data with real API calls.
+This document covers everything the backend agent needs to implement to wire up the Knitly frontend. The frontend is a complete React + Vite app in `src/`. All data is currently mocked in `src/data/index.ts`. Replace mock data with real API calls.
 
 ---
 
@@ -535,7 +535,7 @@ JWT_REFRESH_EXPIRY=30d
 ANTHROPIC_API_KEY=
 
 # Frontend
-FRONTEND_URL=https://app.tracelayer.com
+FRONTEND_URL=https://app.Knitly.com
 
 # Email
 RESEND_API_KEY=

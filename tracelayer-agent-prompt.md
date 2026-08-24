@@ -1,4 +1,4 @@
-# TraceLayer frontend agent — operating instructions
+# Knitly frontend agent — operating instructions
 
 Paste this as a persistent system/project prompt (CLAUDE.md, .cursorrules, or equivalent) so it applies to every task, not just the one you're currently asking about.
 
@@ -42,7 +42,7 @@ When asked for a single thing ("add a login button," "add a settings page"), fir
 
 - No default gradient-hero, no unmodified shadcn spacing/shadows, no generic "modern SaaS" layout picked because it's familiar rather than right for this product.
 - No visually copying the recognizable patterns of other tools (Linear's sidebar, Stripe's hero, Notion's blocks, Jama's dense old-school tables) — study them for what problem they solve, not for their look.
-- Every visual decision needs a reason tied to what TraceLayer actually is (traceability, verification, audit-grade trust) — not "this is what SaaS apps look like now."
+- Every visual decision needs a reason tied to what Knitly actually is (traceability, verification, audit-grade trust) — not "this is what SaaS apps look like now."
 - The current design is approved. Extend its existing tokens, components, and patterns — don't introduce a second design language on top of it, and don't touch anything that wasn't asked to be touched.
 
 ## 5. Process to run on every task

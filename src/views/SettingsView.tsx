@@ -8,11 +8,11 @@ import type { IcoName } from '../types'
 type SettingsTab = 'profile' | 'workspace' | 'notifications' | 'api' | 'billing'
 
 const TABS: [SettingsTab, string, IcoName][] = [
-  ['profile',       'Profile',        'user'],
-  ['workspace',     'Workspace',      'settings'],
-  ['notifications', 'Notifications',  'bell'],
-  ['api',           'API & Webhooks', 'key'],
-  ['billing',       'Billing',        'credit'],
+  ['profile', 'Profile', 'user'],
+  ['workspace', 'Workspace', 'settings'],
+  ['notifications', 'Notifications', 'bell'],
+  ['api', 'API & Webhooks', 'key'],
+  ['billing', 'Billing', 'credit'],
 ]
 
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -138,7 +138,7 @@ export function SettingsView() {
         {tab === 'api' && (
           <div style={st({ maxWidth: 580 })}>
             <h2 className="bri" style={st({ fontSize: 22, fontWeight: 800, color: 'var(--t1)', margin: '0 0 8px', letterSpacing: '-0.03em' })}>API & Webhooks</h2>
-            <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 28px', lineHeight: 1.6 })}>Use the TraceLayer API to push requirements programmatically or receive events via webhooks.</p>
+            <p style={st({ fontSize: 13.5, color: 'var(--t2)', margin: '0 0 28px', lineHeight: 1.6 })}>Use the Knitly API to push requirements programmatically or receive events via webhooks.</p>
             <SLabel>API Keys</SLabel>
             <div style={st({ marginTop: 10, marginBottom: 24 })}>
               <div style={st({ padding: '14px 16px', background: 'var(--sf)', borderRadius: 12, border: '1.5px solid var(--bd)', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 })}>
@@ -160,7 +160,7 @@ export function SettingsView() {
                   </div>
                   <Btn v="ghost" sm>Edit</Btn>
                 </div>
-                <span className="mono" style={st({ fontSize: 11.5, color: 'var(--t3)' })}>https://api.acme.com/hooks/tracelayer</span>
+                <span className="mono" style={st({ fontSize: 11.5, color: 'var(--t3)' })}>https://api.acme.com/hooks/Knitly</span>
               </div>
               <Btn v="ghost" sm><Ico n="plus" s={12} c="var(--t2)" /> Add webhook</Btn>
             </div>

@@ -73,10 +73,10 @@ export function KnowledgeView() {
 
         {tab === 'templates' && (
           <div>
-            {/* TraceLayer platform templates */}
+            {/* Knitly platform templates */}
             <div style={st({ padding: '28px 52px 0' })}>
               <div style={st({ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 })}>
-                <span style={st({ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase' })}>TraceLayer templates</span>
+                <span style={st({ fontSize: 11, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase' })}>Knitly templates</span>
                 <span style={st({ fontSize: 10, fontWeight: 700, color: 'var(--ai)', background: 'var(--aid)', padding: '2px 8px', borderRadius: 100, letterSpacing: '0.04em' })}>Platform</span>
               </div>
             </div>

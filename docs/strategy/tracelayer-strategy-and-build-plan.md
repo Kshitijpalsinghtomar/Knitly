@@ -1,4 +1,4 @@
-# TraceLayer — Strategy & Build Plan
+# Knitly — Strategy & Build Plan
 
 *Compiled 2026-08-23 from a full competitive & trend research sweep: the 10 requirements-management incumbents, the SDD trend leaders (Kiro / Spec Kit / OpenSpec / Tessl), the agentic IDEs (Cursor / Claude Code / Antigravity), the AI-PRD & customer-intelligence startup field, demand/funding evidence, and a six-platform integration evaluation. Full working notes live in [`competitive-notes.md`](../research/competitive-notes.md).*
 
@@ -38,11 +38,11 @@ Even the most rigorous methodology found (VSDD) builds a complete internal chain
 
 A prompt can copy a UI, a doc template, even an extraction chain. It **cannot** copy:
 
-- **Accumulated trace-data gravity.** Every requirement TraceLayer verifies knits one more strand of a graph: source quote ⇄ decision ⇄ design frame ⇄ PR ⇄ status, across a team's whole history. Both Jama (10M-item live graph) and MatrixReq lock in precisely because switching means recreating the entire web. The graph is the moat, not any screen — and it grows every time the product is used.
+- **Accumulated trace-data gravity.** Every requirement Knitly verifies knits one more strand of a graph: source quote ⇄ decision ⇄ design frame ⇄ PR ⇄ status, across a team's whole history. Both Jama (10M-item live graph) and MatrixReq lock in precisely because switching means recreating the entire web. The graph is the moat, not any screen — and it grows every time the product is used.
 - **The three-way triangle** above, as a *system of record*, not a one-shot generation. Generation is a commodity; *maintaining a verified thread over time* is not.
 - **Being the neutral layer *on top of* the systems of record.** We borrow GitHub/Figma/Slack via API and never try to replace them (proven model: Modern Requirements sits on ADO, no data leaves it). That neutrality is a position, not a feature.
 
-**Positioning sentence to build toward:** *"Building without TraceLayer isn't trustworthy"* — because the alternative is AI-generated code shipping with no verifiable line back to a human decision, and signed-off specs silently drifting from both the conversation that created them and the code that's supposed to implement them.
+**Positioning sentence to build toward:** *"Building without Knitly isn't trustworthy"* — because the alternative is AI-generated code shipping with no verifiable line back to a human decision, and signed-off specs silently drifting from both the conversation that created them and the code that's supposed to implement them.
 
 ---
 
@@ -52,7 +52,7 @@ A prompt can copy a UI, a doc template, even an extraction chain. It **cannot** 
 
 **The objection to preempt (it's credible and loud):** a vocal camp argues SDD is "waterfall redux" and that *no tool can turn messy input into a durable spec because writing the spec IS the thinking* ("Spec-driven development doesn't work if you're too confused to write the spec"; marmelab's "Waterfall Strikes Back," 225 pts).
 
-> **Our answer:** TraceLayer does **not** claim to do the thinking for you or replace discovery. It preserves *provenance* and detects *drift/contradiction* — the parts humans reliably fail at and that compound silently. We assist the discovery; we don't pretend to finish it. This must be baked into the product's voice and UX, or we inherit the backlash.
+> **Our answer:** Knitly does **not** claim to do the thinking for you or replace discovery. It preserves *provenance* and detects *drift/contradiction* — the parts humans reliably fail at and that compound silently. We assist the discovery; we don't pretend to finish it. This must be baked into the product's voice and UX, or we inherit the backlash.
 
 ---
 
@@ -68,7 +68,7 @@ A prompt can copy a UI, a doc template, even an extraction chain. It **cannot** 
 
 ## 5. The meeting → code lifecycle: what to minimize, replace, add
 
-| Lifecycle step | Who owns it today | TraceLayer's move |
+| Lifecycle step | Who owns it today | Knitly's move |
 |---|---|---|
 | Elicitation (meetings/Slack/email) | Notes tools (Otter/Fireflies) — stop at action items | **ADD**: ingest as *traceable source signal*, not notes |
 | Analysis / reconciliation | Humans, manually; nobody detects cross-source conflict | **ADD** (core moat): cross-source, cross-time contradiction detection |
@@ -110,7 +110,7 @@ The discipline: **borrow undifferentiated plumbing, own the trace graph and the 
 
 - **Integration layer → Composio (primary).** Managed OAuth + field-preserving tools (keeps PR SHA, Figma version hash, Slack `ts`) + webhook triggers + hosted MCP + Python/TS SDKs. Behind an `IntegrationProvider` seam so we can swap to **Nango** (OSS, self-hostable, SOC 2) or **Arcade** (VPC/air-gapped) for compliance buyers. **Loom = direct API, low priority** (no platform wraps it).
 - **Extraction → real Claude**, swapped in behind the existing `BrdGenerator` interface. The deterministic `RuleBasedBrdGenerator` stays as an offline/fallback path.
-- **MCP bridge → we host our own MCP server = TraceLayer's policy engine.** It calls Composio tool-execution underneath. Composio gives tool-level allow-list + per-user auth; **we** add the row/field-level visibility policy that guarantees *nothing restricted ever leaks* (your hard constraint). Restricted context simply isn't reachable through the bridge.
+- **MCP bridge → we host our own MCP server = Knitly's policy engine.** It calls Composio tool-execution underneath. Composio gives tool-level allow-list + per-user auth; **we** add the row/field-level visibility policy that guarantees *nothing restricted ever leaks* (your hard constraint). Restricted context simply isn't reachable through the bridge.
 - **Data → multi-tenant Postgres (Neon).** Extend the current `sources`/`brds` schema to workspaces, users, documents, requirements, trace-links, conflicts. The DB client stays server-only (never in the browser bundle); `ServerStatus` never leaks the connection URL.
 - **Biggest risk to actively manage:** Composio is cloud-only and customer signal transits it. Keep the seam swappable; offer the self-hostable layer (Nango/Arcade) as the enterprise escape hatch.
 
@@ -141,7 +141,7 @@ The discipline: **borrow undifferentiated plumbing, own the trace graph and the 
 - Real-time collaboration on documents.
 
 **Phase 5 — Spec export into the SDD ecosystem**
-- EARS/markdown export consumable by Kiro / Spec-Kit / Cursor / Antigravity's Implementation Plan — TraceLayer becomes the verified front-end that feeds the agents.
+- EARS/markdown export consumable by Kiro / Spec-Kit / Cursor / Antigravity's Implementation Plan — Knitly becomes the verified front-end that feeds the agents.
 
 ---
 

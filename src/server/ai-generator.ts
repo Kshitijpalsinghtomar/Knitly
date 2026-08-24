@@ -39,7 +39,7 @@ const DEFAULT_MODEL = 'claude-sonnet-5'
 const DEFAULT_TIMEOUT_MS = 60_000
 
 const SYSTEM_PROMPT = [
-  "You are TraceLayer's requirement extractor.",
+  "You are Knitly's requirement extractor.",
   'Extract atomic business/product requirements from the provided source (a meeting transcript, notes, email, or chat log).',
   'RULES:',
   '- Each requirement is a single, testable statement of intent — not a summary of the whole discussion.',
