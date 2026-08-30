@@ -1,41 +1,38 @@
-# figma-make-app
+# Project Agent Instructions
 
-React + Vite + Tailwind CSS project running inside Figma Make.
+PROJECT: Knitly (figma-make-app)
+PURPOSE: AI-native product documentation workspace. Ingest sources (transcripts, Slack, Jira, etc.), generate traceable BRDs/PRDs/specs, detect conflicts, and gate downstream document generation on completeness.
+STACK: React 19, Vite 8, Tailwind CSS v4, TypeScript 5.7, Bun runtime/server, Neon PostgreSQL (with in-memory fallback), pnpm package manager.
+RUN:
+- Frontend dev: `pnpm dev` (Vite on PORT, default 8443)
+- API dev: `pnpm dev:api` (Bun server on API_PORT, default 3000)
+- Production: `pnpm build && pnpm start`
+TEST: `bun test server/`
+BUILD: `pnpm build`
+IMPORTANT DIRECTORIES:
+- `src/` — React frontend (components, views, lib, context, data)
+- `server/` — Bun backend (index.ts, db.ts, generator.ts, gate.ts, tests)
+- `docs/` — project documentation
+- `dist/` — built frontend assets
+- `.figma/` — Figma Make configuration and plugins
+ARCHITECTURE RULES:
+- Frontend uses Vite with `@/` alias pointing to `src/`.
+- Tailwind CSS v4 is imported in `src/index.css`; no separate tailwind.config needed.
+- Vite dev server proxies `/api` to the Bun backend on API_PORT.
+- Backend uses a lazy `DATABASE_URL` connection with in-memory fallback when unset.
+- Document generation follows a model-adapter contract (`BrdGenerator`) so real AI can be swapped in later.
+- Document types and prerequisite gates are declared in `src/lib/documentTypes.ts` and enforced by `src/server/gate.ts`.
+- Components should be default exports.
+DO NOT MODIFY:
+- Do not change the core document-type registry or gate order without explicit approval.
+- Do not remove the in-memory DB fallback path.
+- Do not break the Vite → Bun API proxy contract.
+CONVENTIONS:
+- Use double quotes for strings containing apostrophes to avoid build breaks.
+- Keep JSX tags closed and braces balanced.
+- Use `pnpm` for package management and `bun` for server runtime/tests.
+- Format with `oxfmt` (`pnpm format`).
 
-## Development Server
+Agent rules: read `.aeos/NOW.md` and `.aeos/GUIDE.md` before meaningful work; inspect before modifying; reuse existing patterns; do not invent requirements; stay in scope; report evidence and uncertainty. Never mention AEOS, OpenWork, agent names, handoffs, or `.aeos/` in code comments, commit messages, docs, or other project artifacts.
 
-A Vite development server is **already running** on `$PORT` (default 8443). You don't need to start it manually.
-
-- Preview URL: The user can access the running app through the preview panel
-- Hot reload: Changes to source files are reflected immediately
-
-## Project Structure
-
-This is the canonical project structure. Start with task-relevant files below. Only follow imports or inspect other files when required, when a documented path is missing, or when the repository contradicts this guide.
-
-- `src/main.tsx` - React entrypoint; imports `src/index.css` and mounts `src/App.tsx` into the `#root` element
-- `src/App.tsx` - Primary application component and the usual starting point for UI work
-- `src/index.css` - Global CSS entrypoint and Tailwind CSS v4 import
-- `index.html` - Vite HTML shell containing the `#root` element and loading `src/main.tsx`
-- `package.json` - Project dependencies and the Vite build, development, preview, and formatting scripts
-- `vite.config.ts` - Vite configuration with React, Tailwind CSS v4, and Figma Make plugins plus the `@` alias for `src`
-- `.mise.toml` - Toolchain versions for Node.js and pnpm
-
-## Dependencies
-
-- Runtime: React 19 and React DOM 19
-- Styling: Tailwind CSS v4 with the `@tailwindcss/vite` plugin
-- Build tooling: Vite 8, TypeScript 5.7, and `@vitejs/plugin-react`
-- Formatting: oxfmt
-
-## Styling
-
-This project uses **Tailwind CSS v4** through the `@tailwindcss/vite` plugin configured in `vite.config.ts`. `src/index.css` imports Tailwind with `@import 'tailwindcss';`. Use Tailwind utility classes directly in JSX and put global CSS or Tailwind v4 theme customization in `src/index.css`. This scaffold does not need a Tailwind config file or PostCSS config.
-
-`src/main.tsx` imports `src/index.css`, so global font wiring belongs in `src/index.css`. Keep CSS `@import` statements first, then add any `@font-face` rules and font-family defaults there.
-
-## Code quality
-
-- Use double quotes for strings containing apostrophes (`"We're here to help"`), or escape them in single-quoted strings. An unescaped apostrophe in a single-quoted string breaks the build.
-- Ensure JSX tags are closed and braces are balanced.
-- Export components as default exports.
+> ⚠️ **REMINDER:** Ponytail is not installed for this project yet. See `.aeos/GUIDE.md` and `AEOS/TOOLS.md` for install commands. Run them once per project to add Ponytail rules files; they then work for all agents.
